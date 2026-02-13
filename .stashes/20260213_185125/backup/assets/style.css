@@ -1,0 +1,33 @@
+window {
+  background-color: #0a0a0a;
+  color: #00ff41;
+  font-family: "Monospace";
+}
+
+.sidebar {
+  background-color: #111;
+  border-right: 1px solid #00ff41;
+}
+
+button {
+  background: #111;
+  color: #00ff41;
+  border: 1px solid #00ff41;
+  border-radius: 0;
+  padding: 5px;
+  font-weight: bold;
+}
+
+button:hover {
+  background: #00ff41;
+  color: #000;
+}
+
+textview {
+  background-color: #050505;
+  color: #00ff41;
+}
+
+label {
+  font-size: 12px;
+}

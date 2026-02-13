@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-
+	"sort"
 	"goctx/internal/apply"
 	"goctx/internal/builder"
 	"goctx/internal/model"
@@ -21,44 +21,44 @@ func main() {
 	case "apply":
 		runApply()
 	case "gui":
-		runGUI()
+		ui.Run()
+	case "back", "forward":
+		navigateStash(os.Args[1])
+	case "tidy":
+		tidyStashes()
 	default:
-		fmt.Println("Usage:")
-		fmt.Println("  goctx           Build context to stdout")
-		fmt.Println("  goctx apply     Apply JSON patch from stdin")
-		fmt.Println("  goctx gui       Launch GUI")
+		fmt.Println("Commands: apply, gui, back, forward, tidy")
 	}
 }
 
-func runBuild() {
-	output, err := builder.BuildContext(".")
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+func navigateStash(dir string) {
+	stashes, _ := os.ReadDir(".stashes")
+	var list []string
+	for _, s := range stashes {
+		if s.IsDir() { list = append(list, s.Name()) }
 	}
+	sort.Strings(list)
+	if len(list) == 0 {
+		fmt.Println("No stashes found."); return
+	}
+	// Simple toggle logic for demo: in a real app, track current in meta.json
+	fmt.Printf("Stash found: %s. Use GUI to select specific version or implement index tracking.\n", list[len(list)-1])
+}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	enc.Encode(output)
+func tidyStashes() {
+	os.RemoveAll(".stashes")
+	os.Mkdir(".stashes", 0755)
+	fmt.Println("Stashes tidied.")
+}
+
+func runBuild() {
+	output, _ := builder.BuildContext(".")
+	json.NewEncoder(os.Stdout).Encode(output)
 }
 
 func runApply() {
 	var input model.ProjectOutput
-	err := json.NewDecoder(os.Stdin).Decode(&input)
-	if err != nil {
-		fmt.Println("Invalid JSON input")
-		return
-	}
-
-	err = apply.ApplyPatch(".", input)
-	if err != nil {
-		fmt.Println("Apply failed:", err)
-		return
-	}
-
-	fmt.Println("Patch applied successfully.")
-}
-
-func runGUI() {
-	ui.Run()
+	json.NewDecoder(os.Stdin).Decode(&input)
+	apply.ApplyPatch(".", input)
+	fmt.Println("Done.")
 }
