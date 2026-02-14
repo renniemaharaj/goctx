@@ -1,6 +1,8 @@
 package builder
 
 import (
+	"bufio"
+	"fmt"
 	"goctx/internal/model"
 	"os"
 	"path/filepath"
@@ -13,13 +15,30 @@ type fileResult struct {
 	content string
 }
 
+func LoadIgnorePatterns(root string) []string {
+	patterns := []string{".git", ".stashes", "node_modules", "goctx", "go.sum"}
+	f, err := os.Open(filepath.Join(root, ".ctxignore"))
+	if err == nil {
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line != "" && !strings.HasPrefix(line, "#") {
+				patterns = append(patterns, line)
+			}
+		}
+	}
+	return patterns
+}
+
 func BuildSelectiveContext(root string, targets []string) (model.ProjectOutput, error) {
 	out := model.ProjectOutput{Files: make(map[string]string)}
+	ignorePatterns := LoadIgnorePatterns(root)
+	
 	fileChan := make(chan string, 100)
 	resultChan := make(chan fileResult, 100)
 	var wg sync.WaitGroup
 
-	// 1. Start Workers (Parallel Reading)
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
@@ -34,33 +53,35 @@ func BuildSelectiveContext(root string, targets []string) (model.ProjectOutput, 
 		}()
 	}
 
-	// 2. Start Collector
 	done := make(chan bool)
+	var totalChars int
 	go func() {
 		for res := range resultChan {
 			out.Files[res.path] = res.content
+			totalChars += len(res.content)
 		}
 		done <- true
 	}()
 
-	// 3. Walk and Pipe paths
+	var tree strings.Builder
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil { return nil }
-		if info.IsDir() {
-			name := info.Name()
-			if name == ".git" || name == "node_modules" || name == ".stashes" || name == ".vscode" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
 		rel, _ := filepath.Rel(root, path)
-		matched := len(targets) == 0
-		for _, t := range targets {
-			if strings.Contains(rel, t) { matched = true; break }
+		if rel == "." { return nil }
+
+		for _, p := range ignorePatterns {
+			if strings.Contains(rel, p) {
+				if info.IsDir() { return filepath.SkipDir }
+				return nil
+			}
 		}
 
-		if matched { fileChan <- path }
+		depth := strings.Count(rel, string(os.PathSeparator))
+		indent := ""
+		if depth > 0 { indent = strings.Repeat("  ", depth) + "└── " }
+		tree.WriteString(fmt.Sprintf("%s%s\n", indent, info.Name()))
+
+		if !info.IsDir() { fileChan <- path }
 		return nil
 	})
 
@@ -69,5 +90,7 @@ func BuildSelectiveContext(root string, targets []string) (model.ProjectOutput, 
 	close(resultChan)
 	<-done
 
+	out.ProjectTree = tree.String()
+	out.EstimatedTokens = (totalChars + len(out.ProjectTree)) / 4
 	return out, err
 }

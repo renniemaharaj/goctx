@@ -6,47 +6,45 @@ import (
 	"goctx/internal/apply"
 	"goctx/internal/builder"
 	"goctx/internal/model"
+	"github.com/gotk3/gotk3/gdk"
+	"github.com/gotk3/gotk3/gtk"
+	"github.com/gotk3/gotk3/glib"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"github.com/gotk3/gotk3/gdk"
-	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
 )
 
 var (
-	activeContext  model.ProjectOutput
-	currentPayload string
-	lastClipboard  string
-	statsBuf       *gtk.TextBuffer
-	stashList      *gtk.ListBox
-	pendingList    *gtk.ListBox
-	pendingPatches []model.ProjectOutput
-	selectedStash  model.ProjectOutput
-	win            *gtk.Window
-	statusLabel    *gtk.Label
+	activeContext   model.ProjectOutput
+	currentPayload  string
+	lastClipboard   string
+	statsBuf        *gtk.TextBuffer
+	stashList       *gtk.ListBox
+	pendingList     *gtk.ListBox
+	pendingPatches  []model.ProjectOutput
+	selectedStash   model.ProjectOutput
+	win             *gtk.Window
 )
 
 func Run() {
 	gtk.Init(nil)
 	win, _ = gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	win.SetTitle("GoCtx Manager")
-	win.SetDefaultSize(1400, 950)
+	win.SetDefaultSize(1400, 900)
 	win.Connect("destroy", gtk.MainQuit)
 
-	vmain, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	hmain, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 
+	// --- SIDEBAR ---
 	leftBar, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 15)
 	leftBar.SetMarginStart(15); leftBar.SetMarginEnd(15); leftBar.SetMarginTop(15)
 	leftBar.SetSizeRequest(320, -1)
 
 	btnBuild := newBtn("CURRENT CONTEXT")
-	btnCopy := newBtn("COPY CONTEXT")
+	btnCopy  := newBtn("COPY CONTEXT")
 	btnApplyPatch := newBtn("APPLY SELECTED PATCH")
 	btnApplyStash := newBtn("APPLY SELECTED STASH")
 	btnApplyPatch.SetSensitive(false); btnApplyStash.SetSensitive(false)
@@ -68,6 +66,7 @@ func Run() {
 	stashList, _ = gtk.ListBoxNew(); swStash.Add(stashList)
 	leftBar.PackStart(swStash, true, true, 0)
 
+	// --- DASHBOARD ---
 	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
 	rightStack.SetMarginStart(20); rightStack.SetMarginEnd(20); rightStack.SetMarginTop(15)
 
@@ -80,16 +79,6 @@ func Run() {
 	statsScroll.Add(statsView)
 	rightStack.PackStart(statsScroll, true, true, 0)
 
-	statusPanel, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	statusPanel.SetMarginStart(10); statusPanel.SetMarginEnd(10)
-	statusLabel, _ = gtk.LabelNew("Ready")
-	statusPanel.PackStart(statusLabel, false, false, 5)
-
-	hmain.PackStart(leftBar, false, false, 0)
-	hmain.PackStart(rightStack, true, true, 0)
-	vmain.PackStart(hmain, true, true, 0)
-	vmain.PackStart(statusPanel, false, false, 5)
-
 	win.Connect("button-press-event", func() {
 		pendingList.UnselectAll(); stashList.UnselectAll()
 		btnApplyPatch.SetSensitive(false); btnApplyStash.SetSensitive(false)
@@ -100,19 +89,20 @@ func Run() {
 			out, err := builder.BuildSelectiveContext(".", nil)
 			if err == nil {
 				activeContext = out
+				// Explicitly convert to clean string
 				currentPayload = string(mustMarshal(out))
-				glib.IdleAdd(func() {
-					statsBuf.SetText(formatStats(activeContext, "Current Workspace State"))
-					updateStatus("Context built (Filtered by .ctxignore)")
-				})
+				glib.IdleAdd(func() { statsBuf.SetText(formatStats(activeContext, "Current Workspace State")) })
 			}
 		}()
 	})
 
 	btnCopy.Connect("clicked", func() {
 		clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
-		clip.SetText(strings.Trim(currentPayload, "\x00"))
-		updateStatus("JSON copied to clipboard")
+		// Ensure we are setting text, not raw atom data
+		cleanText := strings.Trim(currentPayload, "\x00")
+		clip.SetText(cleanText)
+		lastClipboard = cleanText
+		confirmAction("Context JSON copied as clean UTF-8 string.")
 	})
 
 	pendingList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
@@ -126,8 +116,7 @@ func Run() {
 
 	stashList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row == nil { return }
-		lblWidget, _ := row.GetChild(); lbl, _ := lblWidget.(*gtk.Label)
-		txt, _ := lbl.GetText()
+		lblWidget, _ := row.GetChild(); lbl, _ := lblWidget.(*gtk.Label); txt, _ := lbl.GetText()
 		data, err := os.ReadFile(filepath.Join(".stashes", txt, "patch.json"))
 		if err == nil && json.Unmarshal(data, &selectedStash) == nil {
 			statsBuf.SetText(formatStats(selectedStash, "Stash: "+txt))
@@ -139,17 +128,18 @@ func Run() {
 		if confirmAction("Apply selected patch?") {
 			row := pendingList.GetSelectedRow()
 			apply.ApplyPatch(".", pendingPatches[row.GetIndex()])
-			refreshStashes(stashList); updateStatus("Patch applied")
+			refreshStashes(stashList); statsBuf.SetText("SYSTEM: Patch applied.")
 		}
 	})
 
 	btnApplyStash.Connect("clicked", func() {
 		if confirmAction("Restore selected stash?") {
 			apply.ApplyPatch(".", selectedStash)
-			refreshStashes(stashList); updateStatus("Stash restored")
+			refreshStashes(stashList); statsBuf.SetText("SYSTEM: Stash restored.")
 		}
 	})
 
+	// --- CLIPBOARD CLEANER ---
 	go func() {
 		for {
 			time.Sleep(1 * time.Second)
@@ -157,22 +147,18 @@ func Run() {
 				clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
 				text, err := clip.WaitForText()
 				if err == nil && text != "" && text != lastClipboard {
+					// Sanitize incoming clipboard to avoid null-byte processing
 					text = strings.ReplaceAll(text, "\x00", "")
-					lastClipboard = text; processClipboard(text)
+					lastClipboard = text
+					processClipboard(text)
 				}
 			})
 		}
 	}()
 
-	refreshStashes(stashList); win.Add(vmain); win.ShowAll(); gtk.Main()
+	hmain.PackStart(leftBar, false, false, 0); hmain.PackStart(rightStack, true, true, 0)
+	refreshStashes(stashList); win.Add(hmain); win.ShowAll(); gtk.Main()
 }
-
-func confirmAction(msg string) bool {
-	dlg := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO, msg)
-	resp := dlg.Run(); dlg.Destroy(); return resp == gtk.RESPONSE_YES
-}
-
-func updateStatus(msg string) { statusLabel.SetText(fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), msg)) }
 
 func formatStats(p model.ProjectOutput, title string) string {
 	var sb strings.Builder
@@ -187,7 +173,7 @@ func formatStats(p model.ProjectOutput, title string) string {
 		if content == "" {
 			sb.WriteString("[DELETION INSTRUCTION]\n")
 		} else if !utf8.ValidString(content) {
-			sb.WriteString("[BINARY OR INVALID UTF-8 DATA]\n")
+			sb.WriteString("[BINARY OR INVALID UTF-8 DATA - PREVIEW HIDDEN]\n")
 		} else {
 			sb.WriteString(content + "\n")
 		}
@@ -196,15 +182,18 @@ func formatStats(p model.ProjectOutput, title string) string {
 }
 
 func processClipboard(text string) {
-	if !strings.Contains(text, "\"files\"") { return }
+	// Use a more restrictive JSON check to ensure it is actually our structure
+	if !strings.Contains(text, "\"files\"") || !strings.Contains(text, "{") { return }
+	
 	re := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
 	match := re.FindString(text)
 	if match != "" {
 		var patch model.ProjectOutput
-		if err := json.Unmarshal([]byte(match), &patch); err == nil {
+		if err := json.Unmarshal([]byte(match), &patch) == nil {
 			pendingPatches = append(pendingPatches, patch)
-			row, _ := gtk.ListBoxRowNew(); lbl, _ := gtk.LabelNew(fmt.Sprintf("Patch %d (%d files)", len(pendingPatches), len(patch.Files)))
-			row.Add(lbl); pendingList.Add(row); pendingList.ShowAll(); updateStatus("New patch detected")
+			row, _ := gtk.ListBoxRowNew()
+			lbl, _ := gtk.LabelNew(fmt.Sprintf("Patch %d (%d files)", len(pendingPatches), len(patch.Files)))
+			row.Add(lbl); pendingList.Add(row); pendingList.ShowAll()
 		}
 	}
 }
