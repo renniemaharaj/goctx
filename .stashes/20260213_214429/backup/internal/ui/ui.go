@@ -56,7 +56,7 @@ func Run() {
 	swPending.Add(pendingList)
 	leftBar.PackStart(swPending, true, true, 0)
 
-	label(leftBar, "STASHES")
+	label(leftBar, "SESSION HISTORY")
 	swStash, _ := gtk.ScrolledWindowNew(nil, nil)
 	stashList, _ = gtk.ListBoxNew()
 	swStash.Add(stashList)
@@ -74,14 +74,7 @@ func Run() {
 	statsScroll.Add(statsView)
 	rightStack.PackStart(statsScroll, true, true, 0)
 
-	// --- DESELECT LOGIC (Click Away) ---
-	win.Connect("button-press-event", func(w *gtk.Window, event *gdk.Event) {
-		// If we click anywhere that isnt the listbox, clear selections
-		pendingList.UnselectAll()
-		stashList.UnselectAll()
-		btnApply.SetSensitive(false)
-	})
-
+	// --- LOGIC: BUILD & COPY ---
 	btnBuild.Connect("clicked", func() {
 		go func() {
 			out, err := builder.BuildSelectiveContext(".", nil)
@@ -97,30 +90,13 @@ func Run() {
 		clip.SetText(currentPayload); lastClipboard = currentPayload
 	})
 
+	// --- LOGIC: SELECTION ---
 	pendingList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row == nil { return }
-		stashList.UnselectAll() // Ensure mutually exclusive selection
 		idx := row.GetIndex()
 		if idx < len(pendingPatches) {
 			statsBuf.SetText(formatStats(pendingPatches[idx], "Pending Patch"))
 			btnApply.SetSensitive(true)
-		}
-	})
-
-	stashList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
-		if row == nil { return }
-		pendingList.UnselectAll()
-		lblWidget, _ := row.GetChild()
-		lbl, _ := lblWidget.(*gtk.Label)
-		txt, _ := lbl.GetText()
-		
-		data, err := os.ReadFile(filepath.Join(".stashes", txt, "patch.json"))
-		if err == nil {
-			var p model.ProjectOutput
-			if err := json.Unmarshal(data, &p); err == nil {
-				statsBuf.SetText(formatStats(p, "Stash: "+txt))
-				btnApply.SetSensitive(false) // Stashes are historical, not pending
-			}
 		}
 	})
 
@@ -129,11 +105,13 @@ func Run() {
 		if row == nil { return }
 		patch := pendingPatches[row.GetIndex()]
 		apply.ApplyPatch(".", patch)
+		// Deletion logic check is handled by the apply package
 		btnApply.SetSensitive(false)
 		refreshStashes(stashList)
 		statsBuf.SetText("ACTION COMPLETE: Files updated/removed.")
 	})
 
+	// --- CLIPBOARD MONITOR ---
 	go func() {
 		for {
 			time.Sleep(1 * time.Second)
@@ -177,13 +155,13 @@ func formatStats(p model.ProjectOutput, title string) string {
 	sb.WriteString(fmt.Sprintf("=== %s ===\n", strings.ToUpper(title)))
 	sb.WriteString(fmt.Sprintf("TOKENS:  %d\nFILES:   %d\n\n", p.EstimatedTokens, len(p.Files)))
 	sb.WriteString("DIRECTORY TREE:\n")
-	if p.ProjectTree != "" { sb.WriteString(p.ProjectTree) } else { sb.WriteString("(No tree data available)") }
-	sb.WriteString("\n\nFILES IN SCOPE:\n")
+	sb.WriteString(p.ProjectTree)
+	sb.WriteString("\n\nMODIFICATIONS:\n")
 	for f, content := range p.Files {
 		if content == "" {
-			sb.WriteString("  [DELETE] " + f + "\n")
+			sb.WriteString("  [DEL] " + f + "\n")
 		} else {
-			sb.WriteString("  " + f + "\n")
+			sb.WriteString("  [MOD] " + f + "\n")
 		}
 	}
 	return sb.String()
@@ -193,7 +171,6 @@ func mustMarshal(v interface{}) []byte { b, _ := json.Marshal(v); return b }
 func refreshStashes(list *gtk.ListBox) {
 	glib.IdleAdd(func() bool {
 		list.GetChildren().Foreach(func(item interface{}) { list.Remove(item.(gtk.IWidget)) })
-		os.MkdirAll(".stashes", 0755)
 		filepath.Walk(".stashes", func(path string, info os.FileInfo, err error) error {
 			if err == nil && info.IsDir() && path != ".stashes" && filepath.Dir(path) == ".stashes" {
 				row, _ := gtk.ListBoxRowNew(); lbl, _ := gtk.LabelNew(filepath.Base(path)); row.Add(lbl); list.Add(row)
