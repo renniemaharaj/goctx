@@ -11,8 +11,8 @@ import (
 )
 
 type StashRefs struct {
-	CurrentID string   `json:"current_id"` 
-	History   []string `json:"history"` 
+	CurrentID string   `json:"current_id"`
+	History   []string `json:"history"`
 }
 
 func CreateStash(root string, patch model.ProjectOutput) (string, error) {
@@ -32,7 +32,7 @@ func CreateStash(root string, patch model.ProjectOutput) (string, error) {
 
 	patchData, _ := json.MarshalIndent(patch, "", "  ")
 	os.WriteFile(filepath.Join(base, "patch.json"), patchData, 0644)
-	
+
 	updateRefs(root, id)
 	return id, nil
 }
@@ -42,9 +42,12 @@ func updateRefs(root, id string) {
 	refs.CurrentID = id
 	found := false
 	for _, h := range refs.History {
-		if h == id { found = true; break }
+		if h == id {
+			found = true
+			break
+		}
 	}
-	if !found { 
+	if !found {
 		refs.History = append(refs.History, id)
 		sort.Strings(refs.History)
 	}
@@ -72,4 +75,9 @@ func MarkApplied(root, id string) error {
 
 func GetActiveID(root string) string {
 	return loadRefs(root).CurrentID
+}
+
+func DeleteStash(root, id string) error {
+	base := filepath.Join(root, ".stashes", id)
+	return os.RemoveAll(base)
 }

@@ -151,9 +151,23 @@ func Run() {
 
 	btnApplyStash.Connect("clicked", func() {
 		if confirmAction(win, "Apply selected stash?") {
-			apply.ApplyPatch(".", selectedStash)
-			updateStatus(statusLabel, "Stash applied")
-			refreshStashes(stashPanel.List)
+			row := stashPanel.List.GetSelectedRow()
+			if row != nil {
+				lblWidget, _ := row.GetChild()
+				lbl, _ := lblWidget.(*gtk.Label)
+				txt, _ := lbl.GetText()
+				id := strings.TrimSuffix(txt, " (ACTIVE)")
+				
+				err := apply.ApplyPatch(".", selectedStash)
+				if err == nil {
+					stash.DeleteStash(".", id)
+					updateStatus(statusLabel, "Stash applied and removed")
+					clearAllSelections()
+					refreshStashes(stashPanel.List)
+				} else {
+					updateStatus(statusLabel, "Error applying stash: " + err.Error())
+				}
+			}
 		}
 	})
 

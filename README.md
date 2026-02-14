@@ -40,6 +40,7 @@ GoCtx supports standard streams for seamless integration between tools:
 ## Usage
 
 1. Run the dashboard:
+
    ```bash
    go run main.go gui
    ```
