@@ -7,8 +7,8 @@ import (
 	"goctx/internal/builder"
 	"goctx/internal/model"
 	"goctx/internal/patch"
-	"goctx/internal/stash"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -136,37 +136,47 @@ func Run() {
 			return
 		}
 		pendingPanel.List.UnselectAll()
+
 		lblWidget, _ := row.GetChild()
 		lbl, _ := lblWidget.(*gtk.Label)
-		txt, _ := lbl.GetText()
-		// Clean label if it has (ACTIVE) tag
-		txt = strings.TrimSuffix(txt, " (ACTIVE)")
-		data, err := os.ReadFile(filepath.Join(".stashes", txt, "patch.json"))
-		if err == nil && json.Unmarshal(data, &selectedStash) == nil {
-			renderDiff(selectedStash, "Stash: "+txt)
+		fullText, _ := lbl.GetText()
+
+		// Extract stash@{n}
+		re := regexp.MustCompile(`stash@\{\d+\}`)
+		stashRef := re.FindString(fullText)
+
+		if stashRef != "" {
+			showCmd := exec.Command("git", "stash", "show", "-p", stashRef)
+			out, _ := showCmd.Output()
+
+			statsBuf.SetText("")
+			statsBuf.InsertWithTag(statsBuf.GetEndIter(), "GIT STASH PREVIEW: "+stashRef+"\n\n", getTag("header"))
+			statsBuf.Insert(statsBuf.GetEndIter(), string(out))
+
 			btnApplyStash.SetSensitive(true)
 			btnApplyPatch.SetSensitive(false)
 		}
 	})
 
 	btnApplyStash.Connect("clicked", func() {
-		if confirmAction(win, "Apply selected stash?") {
-			row := stashPanel.List.GetSelectedRow()
-			if row != nil {
-				lblWidget, _ := row.GetChild()
-				lbl, _ := lblWidget.(*gtk.Label)
-				txt, _ := lbl.GetText()
-				id := strings.TrimSuffix(txt, " (ACTIVE)")
-				
-				err := apply.ApplyPatch(".", selectedStash)
-				if err == nil {
-					stash.DeleteStash(".", id)
-					updateStatus(statusLabel, "Stash applied and removed")
-					clearAllSelections()
-					refreshStashes(stashPanel.List)
-				} else {
-					updateStatus(statusLabel, "Error applying stash: " + err.Error())
-				}
+		row := stashPanel.List.GetSelectedRow()
+		if row == nil {
+			return
+		}
+
+		lblWidget, _ := row.GetChild()
+		lbl, _ := lblWidget.(*gtk.Label)
+		fullText, _ := lbl.GetText()
+		re := regexp.MustCompile(`stash@\{\d+\}`)
+		stashRef := re.FindString(fullText)
+
+		if stashRef != "" && confirmAction(win, "Apply "+stashRef+"?") {
+			cmd := exec.Command("git", "stash", "apply", stashRef)
+			if err := cmd.Run(); err != nil {
+				updateStatus(statusLabel, "Conflict or error applying git stash")
+			} else {
+				updateStatus(statusLabel, "Stash applied successfully")
+				refreshStashes(stashPanel.List)
 			}
 		}
 	})
@@ -180,15 +190,15 @@ func Run() {
 				if err == nil {
 					// Remove from slice
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
-					
+
 					// Remove from UI list
 					pendingPanel.List.Remove(row)
-					
+
 					updateStatus(statusLabel, "Patch applied and removed from pending")
 					clearAllSelections()
 					refreshStashes(stashPanel.List)
 				} else {
-					updateStatus(statusLabel, "Error: " + err.Error())
+					updateStatus(statusLabel, "Error: "+err.Error())
 				}
 			}
 		}
@@ -222,17 +232,11 @@ func Run() {
 }
 
 func countStashes() int {
-	entries, err := os.ReadDir(".stashes")
+	out, err := exec.Command("git", "stash", "list").Output()
 	if err != nil {
 		return 0
 	}
-	count := 0
-	for _, e := range entries {
-		if e.IsDir() {
-			count++
-		}
-	}
-	return count
+	return strings.Count(string(out), "\n")
 }
 
 func clearAllSelections() {
@@ -250,23 +254,23 @@ func resetView() {
 
 func refreshStashes(list *gtk.ListBox) {
 	list.GetChildren().Foreach(func(item interface{}) { list.Remove(item.(gtk.IWidget)) })
-	os.MkdirAll(".stashes", 0755)
-	activeID := stash.GetActiveID(".")
 
-	filepath.Walk(".stashes", func(path string, info os.FileInfo, err error) error {
-		if err == nil && info.IsDir() && path != ".stashes" && filepath.Dir(path) == ".stashes" {
-			name := filepath.Base(path)
-			row, _ := gtk.ListBoxRowNew()
-			display := name
-			if name == activeID {
-				display += " (ACTIVE)"
-			}
-			lbl, _ := gtk.LabelNew(display)
-			row.Add(lbl)
-			list.Add(row)
+	out, err := exec.Command("git", "stash", "list").Output()
+	if err != nil {
+		return
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
 		}
-		return nil
-	})
+		row, _ := gtk.ListBoxRowNew()
+		lbl, _ := gtk.LabelNew(line)
+		lbl.SetXAlign(0)
+		row.Add(lbl)
+		list.Add(row)
+	}
 	list.ShowAll()
 }
 
@@ -373,63 +377,63 @@ func renderDiff(p model.ProjectOutput, title string) {
 }
 
 func processClipboard(text string) {
-    var input model.ProjectOutput
-    
-    // 1. Try JSON extraction
-    reJSON := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
-    jsonMatch := reJSON.FindString(text)
+	var input model.ProjectOutput
 
-    if jsonMatch != "" && json.Unmarshal([]byte(jsonMatch), &input) == nil {
-        // Successfully parsed JSON
-    } else if strings.Contains(text, "<<<<<< SEARCH") && strings.Contains(text, "======") {
-        // 2. Fallback: Raw surgical block - try to find a file path header
-        path := "unknown_file.go"
-        rePath := regexp.MustCompile(`(?i)FILE:\s*([^\s\n]+)`)
-        pathMatch := rePath.FindStringSubmatch(text)
-        if len(pathMatch) > 1 {
-            path = pathMatch[1]
-        }
+	// 1. Try JSON extraction
+	reJSON := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
+	jsonMatch := reJSON.FindString(text)
 
-        input = model.ProjectOutput{
-            ShortDescription: "Manual: " + filepath.Base(path),
-            Files: map[string]string{
-                path: text,
-            },
-        }
-    } else {
-        return
-    }
+	if jsonMatch != "" && json.Unmarshal([]byte(jsonMatch), &input) == nil {
+		// Successfully parsed JSON
+	} else if strings.Contains(text, "<<<<<< SEARCH") && strings.Contains(text, "======") {
+		// 2. Fallback: Raw surgical block - try to find a file path header
+		path := "unknown_file.go"
+		rePath := regexp.MustCompile(`(?i)FILE:\s*([^\s\n]+)`)
+		pathMatch := rePath.FindStringSubmatch(text)
+		if len(pathMatch) > 1 {
+			path = pathMatch[1]
+		}
 
-    // Add to list with Trash Icon
-    pendingPatches = append(pendingPatches, input)
-    row, _ := gtk.ListBoxRowNew()
-    hbox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
-    
-    lbl, _ := gtk.LabelNew(input.ShortDescription)
-    if input.ShortDescription == "" {
-        lbl.SetText(fmt.Sprintf("Patch %d", len(pendingPatches)))
-    }
-    lbl.SetXAlign(0)
-    hbox.PackStart(lbl, true, true, 5)
+		input = model.ProjectOutput{
+			ShortDescription: "Manual: " + filepath.Base(path),
+			Files: map[string]string{
+				path: text,
+			},
+		}
+	} else {
+		return
+	}
 
-    delBtn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_MENU)
-    delBtn.SetRelief(gtk.RELIEF_NONE)
-    delBtn.Connect("clicked", func() {
-        cIdx := row.GetIndex()
-        if cIdx >= 0 && cIdx < len(pendingPatches) {
-            pendingPatches = append(pendingPatches[:cIdx], pendingPatches[cIdx+1:]...)
-            pendingPanel.List.Remove(row)
-            resetView()
-            updateStatus(statusLabel, "Patch removed")
-        }
-    })
+	// Add to list with Trash Icon
+	pendingPatches = append(pendingPatches, input)
+	row, _ := gtk.ListBoxRowNew()
+	hbox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
 
-    hbox.PackEnd(delBtn, false, false, 2)
-    row.Add(hbox)
-    
-    pendingPanel.List.Add(row)
-    pendingPanel.List.ShowAll()
-    updateStatus(statusLabel, "New patch detected")
+	lbl, _ := gtk.LabelNew(input.ShortDescription)
+	if input.ShortDescription == "" {
+		lbl.SetText(fmt.Sprintf("Patch %d", len(pendingPatches)))
+	}
+	lbl.SetXAlign(0)
+	hbox.PackStart(lbl, true, true, 5)
+
+	delBtn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_MENU)
+	delBtn.SetRelief(gtk.RELIEF_NONE)
+	delBtn.Connect("clicked", func() {
+		cIdx := row.GetIndex()
+		if cIdx >= 0 && cIdx < len(pendingPatches) {
+			pendingPatches = append(pendingPatches[:cIdx], pendingPatches[cIdx+1:]...)
+			pendingPanel.List.Remove(row)
+			resetView()
+			updateStatus(statusLabel, "Patch removed")
+		}
+	})
+
+	hbox.PackEnd(delBtn, false, false, 2)
+	row.Add(hbox)
+
+	pendingPanel.List.Add(row)
+	pendingPanel.List.ShowAll()
+	updateStatus(statusLabel, "New patch detected")
 }
 
 func mustMarshal(v interface{}) []byte { b, _ := json.MarshalIndent(v, "", "  "); return b }

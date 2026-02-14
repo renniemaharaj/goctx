@@ -16,7 +16,7 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		return fmt.Errorf("no files to apply")
 	}
 
-	stashID, err := stash.CreateStash(root, input)
+	_, err := stash.CreateStash(root, input)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		}
 	}
 
-	return stash.MarkApplied(root, stashID)
+	return nil
 }
 
 func applySurgicalEdit(path string, hunks []patch.Hunk) error {

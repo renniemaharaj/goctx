@@ -7,7 +7,7 @@ GoCtx is a local orchestrator designed to bridge development environments with A
 - **Context Construction**: Automatically gathers project files while respecting `.ctxignore` rules.
 - **Surgical Patching**: Supports `SEARCH/REPLACE` blocks for large files, reducing token usage and improving reliability.
 - **Clipboard Monitoring**: Detects AI-generated JSON patches from the clipboard for instant review.
-- **Safety Stashing**: Automatically creates a backup in `.stashes` before applying any changes.
+- **Safety Stashing**: Automatically creates a native Git stash before applying any changes for instant rollback capability.
 - **Visual Diffs**: Provides a color-coded preview of changes and validates surgical matches before integration.
 
 ## CLI Interface
