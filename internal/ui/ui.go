@@ -26,8 +26,8 @@ var (
 	activeContext  model.ProjectOutput
 	lastClipboard  string
 	statsBuf       *gtk.TextBuffer
-	stashList      *gtk.ListBox
-	pendingList    *gtk.ListBox
+	stashPanel     *ActionPanel
+	pendingPanel   *ActionPanel
 	pendingPatches []model.ProjectOutput
 	selectedStash  model.ProjectOutput
 	win            *gtk.Window
@@ -65,28 +65,11 @@ func Run() {
 	leftBar.PackStart(btnApplyPatch, false, false, 0)
 	leftBar.PackStart(btnApplyStash, false, false, 0)
 
-	label(leftBar, "PENDING PATCHES")
-	pendingList, _ = gtk.ListBoxNew()
-	ebPending, _ := gtk.EventBoxNew()
-	swPending, _ := gtk.ScrolledWindowNew(nil, nil)
-	swPending.SetSizeRequest(-1, 200)
-	swPending.Add(pendingList)
-	ebPending.Add(swPending)
-	ebPending.Connect("button-press-event", func() {
-		clearAllSelections()
-	})
-	leftBar.PackStart(ebPending, false, false, 0)
+	pendingPanel = NewActionPanel("PENDING PATCHES", 200, clearAllSelections)
+	leftBar.PackStart(pendingPanel.Container, false, false, 0)
 
-	label(leftBar, "STASHES")
-	stashList, _ = gtk.ListBoxNew()
-	ebStash, _ := gtk.EventBoxNew()
-	swStash, _ := gtk.ScrolledWindowNew(nil, nil)
-	swStash.Add(stashList)
-	ebStash.Add(swStash)
-	ebStash.Connect("button-press-event", func() {
-		clearAllSelections()
-	})
-	leftBar.PackStart(ebStash, true, true, 0)
+	stashPanel = NewActionPanel("STASHES", 0, clearAllSelections)
+	leftBar.PackStart(stashPanel.Container, true, true, 0)
 
 	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
 	rightStack.SetMarginStart(20)
@@ -122,7 +105,7 @@ func Run() {
 				activeContext = out
 				glib.IdleAdd(func() {
 					renderDiff(activeContext, "Current Workspace State")
-					updateStatus("Context built")
+					updateStatus(statusLabel, "Context built")
 				})
 			}
 		}()
@@ -132,21 +115,21 @@ func Run() {
 		fullPrompt := AI_PROMPT_WRAPPER + string(mustMarshal(activeContext))
 		clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
 		clip.SetText(fullPrompt)
-		updateStatus("System Prompt + Context copied")
+		updateStatus(statusLabel, "System Prompt + Context copied")
 	})
 
-	pendingList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
+	pendingPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row == nil { return }
-		stashList.UnselectAll()
+		stashPanel.List.UnselectAll()
 		idx := row.GetIndex()
 		renderDiff(pendingPatches[idx], "Pending Patch Preview")
 		btnApplyPatch.SetSensitive(true)
 		btnApplyStash.SetSensitive(false)
 	})
 
-	stashList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
+	stashPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row == nil { return }
-		pendingList.UnselectAll()
+		pendingPanel.List.UnselectAll()
 		lblWidget, _ := row.GetChild()
 		lbl, _ := lblWidget.(*gtk.Label)
 		txt, _ := lbl.GetText()
@@ -159,20 +142,20 @@ func Run() {
 	})
 
 	btnApplyStash.Connect("clicked", func() {
-		if confirmAction("Apply selected stash?") {
+		if confirmAction(win, "Apply selected stash?") {
 			apply.ApplyPatch(".", selectedStash)
-			updateStatus("Stash applied")
-			refreshStashes(stashList)
+			updateStatus(statusLabel, "Stash applied")
+			refreshStashes(stashPanel.List)
 		}
 	})
 
 	btnApplyPatch.Connect("clicked", func() {
-		if confirmAction("Apply selected patch?") {
-			row := pendingList.GetSelectedRow()
+		if confirmAction(win, "Apply selected patch?") {
+			row := pendingPanel.List.GetSelectedRow()
 			if row != nil {
 				apply.ApplyPatch(".", pendingPatches[row.GetIndex()])
-				updateStatus("Patch applied")
-				refreshStashes(stashList)
+				updateStatus(statusLabel, "Patch applied")
+				refreshStashes(stashPanel.List)
 			}
 		}
 	})
@@ -183,7 +166,7 @@ func Run() {
 			glib.IdleAdd(func() {
 				currentCount := countStashes()
 				if currentCount != lastStashCount {
-					refreshStashes(stashList)
+					refreshStashes(stashPanel.List)
 					lastStashCount = currentCount
 				}
 
@@ -197,7 +180,7 @@ func Run() {
 		}
 	}()
 
-	refreshStashes(stashList)
+	refreshStashes(stashPanel.List)
 	lastStashCount = countStashes()
 	win.Add(vmain)
 	win.ShowAll()
@@ -215,8 +198,8 @@ func countStashes() int {
 }
 
 func clearAllSelections() {
-	pendingList.UnselectAll()
-	stashList.UnselectAll()
+	pendingPanel.List.UnselectAll()
+	stashPanel.List.UnselectAll()
 	resetView()
 }
 
@@ -224,7 +207,7 @@ func resetView() {
 	btnApplyPatch.SetSensitive(false)
 	btnApplyStash.SetSensitive(false)
 	statsBuf.SetText("")
-	updateStatus("Selection cleared")
+	updateStatus(statusLabel, "Selection cleared")
 }
 
 func refreshStashes(list *gtk.ListBox) {
@@ -329,26 +312,11 @@ func processClipboard(text string) {
 			row, _ := gtk.ListBoxRowNew()
 			lbl, _ := gtk.LabelNew(fmt.Sprintf("Patch %d (%d files)", len(pendingPatches), len(patch.Files)))
 			row.Add(lbl)
-			pendingList.Add(row)
-			pendingList.ShowAll()
-			updateStatus("New patch detected")
+			pendingPanel.List.Add(row)
+			pendingPanel.List.ShowAll()
+			updateStatus(statusLabel, "New patch detected")
 		}
 	}
 }
 
-func confirmAction(m string) bool {
-	d := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO, m)
-	r := d.Run()
-	d.Destroy()
-	return r == gtk.RESPONSE_YES
-}
-func updateStatus(m string) {
-	statusLabel.SetText(fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), m))
-}
 func mustMarshal(v interface{}) []byte { b, _ := json.MarshalIndent(v, "", "  "); return b }
-func newBtn(l string) *gtk.Button      { b, _ := gtk.ButtonNewWithLabel(l); return b }
-func label(box *gtk.Box, t string) {
-	l, _ := gtk.LabelNew(t)
-	l.SetXAlign(0)
-	box.PackStart(l, false, false, 0)
-}
