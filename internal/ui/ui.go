@@ -6,6 +6,7 @@ import (
 	"goctx/internal/apply"
 	"goctx/internal/builder"
 	"goctx/internal/model"
+	"goctx/internal/patch"
 	"goctx/internal/stash"
 	"os"
 	"path/filepath"
@@ -160,9 +161,21 @@ func Run() {
 		if confirmAction(win, "Apply selected patch?") {
 			row := pendingPanel.List.GetSelectedRow()
 			if row != nil {
-				apply.ApplyPatch(".", pendingPatches[row.GetIndex()])
-				updateStatus(statusLabel, "Patch applied")
-				refreshStashes(stashPanel.List)
+				idx := row.GetIndex()
+				err := apply.ApplyPatch(".", pendingPatches[idx])
+				if err == nil {
+					// Remove from slice
+					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
+					
+					// Remove from UI list
+					pendingPanel.List.Remove(row)
+					
+					updateStatus(statusLabel, "Patch applied and removed from pending")
+					clearAllSelections()
+					refreshStashes(stashPanel.List)
+				} else {
+					updateStatus(statusLabel, "Error: " + err.Error())
+				}
 			}
 		}
 	})
@@ -305,75 +318,104 @@ func renderDiff(p model.ProjectOutput, title string) {
 			oldStr = ""
 		}
 
-		// Intercept surgical blocks to prevent garbled diffs
-		if strings.Contains(newContent, "<<<<<< SEARCH") && strings.Contains(newContent, "======") {
-			statsBuf.InsertWithTag(statsBuf.GetEndIter(), "--- SURGICAL MODIFICATION ---\n", getTag("header"))
-			
-			sStart := strings.Index(newContent, "<<<<<< SEARCH")
-			div := strings.Index(newContent, "======")
-			rEnd := strings.Index(newContent, ">>>>>> REPLACE")
+		// Safe parsing via the patch package
+		hunks := patch.ParseHunks(newContent)
 
-			if sStart != -1 && div != -1 && rEnd != -1 {
-				searchBlock := strings.Trim(newContent[sStart+13:div], "\n\r ")
-				replaceBlock := strings.Trim(newContent[div+6:rEnd], "\n\r ")
-
+		if len(hunks) > 0 {
+			for _, h := range hunks {
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "--- SURGICAL MODIFICATION ---\n", getTag("header"))
 				statsBuf.Insert(statsBuf.GetEndIter(), "[EXISTING CODE]:\n")
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), searchBlock+"\n", getTag("deleted"))
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), h.Search+"\n", getTag("deleted"))
 
 				statsBuf.Insert(statsBuf.GetEndIter(), "\n[REPLACEMENT]:\n")
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), replaceBlock+"\n", getTag("added"))
-			
-				// Live match check against disk
-				if !strings.Contains(oldStr, searchBlock) {
-					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\n⚠️ ERROR: Match not found! This surgical patch will fail.\n", getTag("header"))
-				} else {
-					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\n✅ READY: Exact match found.\n", getTag("added"))
-				}
-			}
-			statsBuf.Insert(statsBuf.GetEndIter(), "\n---\n\n")
-			renderCount++
-			continue
-		}
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), h.Replace+"\n", getTag("added"))
 
-		diffs := dmp.DiffMain(oldStr, newContent, false)
-		if len(diffs) == 1 && diffs[0].Type == diffmatchpatch.DiffEqual {
-			statsBuf.Insert(statsBuf.GetEndIter(), newContent+"\n\n")
+				_, ok := patch.ApplyHunk(oldStr, h)
+				if !ok {
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\nERROR: Match not found! Logic mismatch or indentation error.\n", getTag("header"))
+				} else {
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\nREADY: Hunk match validated.\n", getTag("added"))
+				}
+				statsBuf.Insert(statsBuf.GetEndIter(), "\n---\n\n")
+			}
 		} else {
-			for _, d := range diffs {
-				if utf8.ValidString(d.Text) {
-					switch d.Type {
-					case diffmatchpatch.DiffInsert: statsBuf.InsertWithTag(statsBuf.GetEndIter(), d.Text, getTag("added"))
-					case diffmatchpatch.DiffDelete: statsBuf.InsertWithTag(statsBuf.GetEndIter(), d.Text, getTag("deleted"))
-					default: statsBuf.Insert(statsBuf.GetEndIter(), d.Text)
-					}
+			// standard diff for full file content
+			statsBuf.InsertWithTag(statsBuf.GetEndIter(), "--- FULL FILE OVERWRITE ---\n", getTag("header"))
+			diffs := dmp.DiffMain(oldStr, newContent, true)
+			for _, diff := range diffs {
+				switch diff.Type {
+				case diffmatchpatch.DiffInsert:
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), diff.Text, getTag("added"))
+				case diffmatchpatch.DiffDelete:
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), diff.Text, getTag("deleted"))
+				case diffmatchpatch.DiffEqual:
+					statsBuf.Insert(statsBuf.GetEndIter(), diff.Text)
 				}
 			}
 			statsBuf.Insert(statsBuf.GetEndIter(), "\n\n")
 		}
 		renderCount++
 	}
-
-	if len(keys) > limit {
-		msg := fmt.Sprintf("\n--- PREVIEW LIMIT REACHED: %d/%d files rendered ---", limit, len(keys))
-		statsBuf.Insert(statsBuf.GetEndIter(), msg)
-	}
 }
 
 func processClipboard(text string) {
-	re := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
-	match := re.FindString(text)
-	if match != "" {
-		var patch model.ProjectOutput
-		if err := json.Unmarshal([]byte(match), &patch); err == nil {
-			pendingPatches = append(pendingPatches, patch)
-			row, _ := gtk.ListBoxRowNew()
-			lbl, _ := gtk.LabelNew(fmt.Sprintf("Patch %d (%d files)", len(pendingPatches), len(patch.Files)))
-			row.Add(lbl)
-			pendingPanel.List.Add(row)
-			pendingPanel.List.ShowAll()
-			updateStatus(statusLabel, "New patch detected")
-		}
-	}
+    var input model.ProjectOutput
+    
+    // 1. Try JSON extraction
+    reJSON := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
+    jsonMatch := reJSON.FindString(text)
+
+    if jsonMatch != "" && json.Unmarshal([]byte(jsonMatch), &input) == nil {
+        // Successfully parsed JSON
+    } else if strings.Contains(text, "<<<<<< SEARCH") && strings.Contains(text, "======") {
+        // 2. Fallback: Raw surgical block - try to find a file path header
+        path := "unknown_file.go"
+        rePath := regexp.MustCompile(`(?i)FILE:\s*([^\s\n]+)`)
+        pathMatch := rePath.FindStringSubmatch(text)
+        if len(pathMatch) > 1 {
+            path = pathMatch[1]
+        }
+
+        input = model.ProjectOutput{
+            ShortDescription: "Manual: " + filepath.Base(path),
+            Files: map[string]string{
+                path: text,
+            },
+        }
+    } else {
+        return
+    }
+
+    // Add to list with Trash Icon
+    pendingPatches = append(pendingPatches, input)
+    row, _ := gtk.ListBoxRowNew()
+    hbox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
+    
+    lbl, _ := gtk.LabelNew(input.ShortDescription)
+    if input.ShortDescription == "" {
+        lbl.SetText(fmt.Sprintf("Patch %d", len(pendingPatches)))
+    }
+    lbl.SetXAlign(0)
+    hbox.PackStart(lbl, true, true, 5)
+
+    delBtn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_MENU)
+    delBtn.SetRelief(gtk.RELIEF_NONE)
+    delBtn.Connect("clicked", func() {
+        cIdx := row.GetIndex()
+        if cIdx >= 0 && cIdx < len(pendingPatches) {
+            pendingPatches = append(pendingPatches[:cIdx], pendingPatches[cIdx+1:]...)
+            pendingPanel.List.Remove(row)
+            resetView()
+            updateStatus(statusLabel, "Patch removed")
+        }
+    })
+
+    hbox.PackEnd(delBtn, false, false, 2)
+    row.Add(hbox)
+    
+    pendingPanel.List.Add(row)
+    pendingPanel.List.ShowAll()
+    updateStatus(statusLabel, "New patch detected")
 }
 
 func mustMarshal(v interface{}) []byte { b, _ := json.MarshalIndent(v, "", "  "); return b }
