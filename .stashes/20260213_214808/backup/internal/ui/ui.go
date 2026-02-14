@@ -30,7 +30,7 @@ func Run() {
 	gtk.Init(nil)
 
 	win, _ := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
-	win.SetTitle("GoCtx Manager")
+	win.SetTitle("GoCtx Management Console")
 	win.SetDefaultSize(1300, 850)
 	win.Connect("destroy", gtk.MainQuit)
 
@@ -66,21 +66,17 @@ func Run() {
 	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
 	rightStack.SetMarginStart(20); rightStack.SetMarginEnd(20); rightStack.SetMarginTop(15)
 
-	label(rightStack, "CONTEXT TOOL GUI (GOCTX)")
+	label(rightStack, "DASHBOARD")
 	statsScroll, _ := gtk.ScrolledWindowNew(nil, nil)
-	
 	statsView, _ := gtk.TextViewNew()
-	statsView.SetMonospace(true)
-	statsView.SetEditable(false)
-	// Add padding inside the text area
-	statsView.SetLeftMargin(15)
-	statsView.SetTopMargin(15)
-	
+	statsView.SetMonospace(true); statsView.SetEditable(false)
 	statsBuf, _ = statsView.GetBuffer()
 	statsScroll.Add(statsView)
 	rightStack.PackStart(statsScroll, true, true, 0)
 
+	// --- DESELECT LOGIC (Click Away) ---
 	win.Connect("button-press-event", func(w *gtk.Window, event *gdk.Event) {
+		// If we click anywhere that isnt the listbox, clear selections
 		pendingList.UnselectAll()
 		stashList.UnselectAll()
 		btnApply.SetSensitive(false)
@@ -103,7 +99,7 @@ func Run() {
 
 	pendingList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row == nil { return }
-		stashList.UnselectAll()
+		stashList.UnselectAll() // Ensure mutually exclusive selection
 		idx := row.GetIndex()
 		if idx < len(pendingPatches) {
 			statsBuf.SetText(formatStats(pendingPatches[idx], "Pending Patch"))
@@ -117,12 +113,13 @@ func Run() {
 		lblWidget, _ := row.GetChild()
 		lbl, _ := lblWidget.(*gtk.Label)
 		txt, _ := lbl.GetText()
+		
 		data, err := os.ReadFile(filepath.Join(".stashes", txt, "patch.json"))
 		if err == nil {
 			var p model.ProjectOutput
 			if err := json.Unmarshal(data, &p); err == nil {
 				statsBuf.SetText(formatStats(p, "Stash: "+txt))
-				btnApply.SetSensitive(false)
+				btnApply.SetSensitive(false) // Stashes are historical, not pending
 			}
 		}
 	})
