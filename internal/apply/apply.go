@@ -28,15 +28,22 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 
 		os.MkdirAll(filepath.Dir(path), 0755)
 
-		hunks := patch.ParseHunks(content)
-		if len(hunks) > 0 {
-			err = applySurgicalEdit(path, hunks)
+		var applyErr error
+		// Only attempt surgical apply if the content contains the specific markers
+		if strings.Contains(content, "<<<<<< SEARCH") && strings.Contains(content, ">>>>>> REPLACE") {
+			hunks := patch.ParseHunks(content)
+			if len(hunks) > 0 {
+				applyErr = applySurgicalEdit(path, hunks)
+			} else {
+				applyErr = fmt.Errorf("surgical markers found but failed to parse hunks in %s", path)
+			}
 		} else {
-			err = os.WriteFile(path, []byte(content), 0644)
+			// Standard full file overwrite
+			applyErr = os.WriteFile(path, []byte(content), 0644)
 		}
 
-		if err != nil {
-			return fmt.Errorf("failed at %s: %w", path, err)
+		if applyErr != nil {
+			return fmt.Errorf("failed at %s: %w", path, applyErr)
 		}
 	}
 

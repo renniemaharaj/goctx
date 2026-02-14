@@ -1,17 +1,29 @@
 # GoCtx Project Instructions
 
-## Surgical Patching (NEW)
-To improve efficiency, use **Surgical SEARCH/REPLACE blocks** for large files. 
+## Surgical Patching Protocol
+To improve efficiency and reliability, use **Surgical SEARCH/REPLACE blocks** for updates to existing files. 
 
 ### Rules for Surgical Edits:
-1. Provide enough lines in the `SEARCH` block to ensure a unique match.
-2. The content between `SEARCH` and `REPLACE` must be an exact substring match of the target file.
-3. Format:
+1. **Uniqueness**: Provide enough context lines in the `SEARCH` block to ensure a unique match within the file.
+2. **Exact Match**: The content in the `SEARCH` block must be an exact character-for-character match (including indentation) of the target file.
+3. **Formatting**: Always wrap the markers in the JSON value. Use `\n` for newlines.
+
+### Response Format Example:
 ```json
 {
+  "short_description": "Refactor types",
   "files": {
-    "path/to/file.go": "<<<<<< SEARCH\nfunc old() { ... }\n======\nfunc new() { ... }\n>>>>>> REPLACE"
+    "path/file.go": "<<<<<< SEARCH\nfunc old() { ... }\n======\nfunc new() { ... }\n>>>>>> REPLACE"
   }
 }
 ```
-4. If creating a **new file**, provide the full content without blocks.
+
+4. **New Files**: If creating a brand new file (or performing a total recovery), provide the full content as a string without SEARCH/REPLACE markers.
+
+---
+
+## AI Agent Persona
+You are an expert Go developer. When modifying the `internal/ui` package, ensure GTK widgets are handled safely and idle-callbacks (`glib.IdleAdd`) are used for UI updates from goroutines.
+
+## Project Context
+GoCtx is a developer tool for managing AI-generated patches. It uses GTK3 for the UI and supports a stash-based undo/redo system. Always prioritize safety and visual feedback when adding new features.
