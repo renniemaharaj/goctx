@@ -23,7 +23,7 @@ func Run() {
 
 	win, _ := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	win.SetTitle("GoCtx Orchestrator")
-	win.SetDefaultSize(1100, 700)
+	win.SetDefaultSize(1200, 800)
 	win.Connect("destroy", gtk.MainQuit)
 
 	hbox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
@@ -38,13 +38,11 @@ func Run() {
 	mainStack.SetMarginEnd(20)
 
 	label(mainStack, "PROJECT STATISTICS")
-	sw, _ := gtk.ScrolledWindowNew(nil, nil)
 	statsView, _ := gtk.TextViewNew()
 	statsView.SetEditable(false)
 	statsView.SetCanFocus(false)
 	statsBuf, _ := statsView.GetBuffer()
-	sw.Add(statsView)
-	mainStack.PackStart(sw, true, true, 0)
+	mainStack.PackStart(statsView, true, true, 0)
 
 	btnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 10)
 	btnBuild := newBtn("Build Context")
@@ -75,8 +73,10 @@ func Run() {
 			out, _ := builder.BuildSelectiveContext(".", nil)
 			js, _ := json.Marshal(out)
 			currentPayload = string(js)
+			
 			stats := fmt.Sprintf("Files Indexed: %d\nEstimated Tokens: %d\nTree Size: %d characters", 
 				len(out.Files), out.EstimatedTokens, len(out.ProjectTree))
+			
 			glib.IdleAdd(func() {
 				statsBuf.SetText(stats)
 			})
@@ -87,18 +87,16 @@ func Run() {
 		if currentPayload == "" { return }
 		clipboard, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
 		clipboard.SetText(currentPayload)
-		statsBuf.SetText("Context copied to clipboard.")
 	})
 
 	btnChat.Connect("clicked", func() {
+		// Running webview without the defer destroy inside the goroutine to prevent premature exit
 		go func() {
-			glib.IdleAdd(func() {
-				w := webview.New(false)
-				w.SetTitle("AI Chat")
-				w.SetSize(1200, 900, webview.Hint(0))
-				w.Navigate("https://aistudio.google.com")
-				w.Run()
-			})
+			w := webview.New(false)
+			w.SetTitle("AI Chat")
+			w.SetSize(1200, 900, webview.Hint(0))
+			w.Navigate("https://aistudio.google.com")
+			w.Run()
 		}()
 	})
 
@@ -112,9 +110,7 @@ func Run() {
 			json.Unmarshal([]byte(match), &patch)
 			apply.ApplyPatch(".", patch)
 			refreshStashes(list)
-			statsBuf.SetText("Patch applied successfully.")
-		} else {
-			statsBuf.SetText("No valid JSON patch found in clipboard.")
+			statsBuf.SetText("Patch applied successfully")
 		}
 	})
 
@@ -131,7 +127,6 @@ func Run() {
 func refreshStashes(list *gtk.ListBox) {
 	glib.IdleAdd(func() bool {
 		list.GetChildren().Foreach(func(item interface{}) { list.Remove(item.(gtk.IWidget)) })
-		os.MkdirAll(".stashes", 0755)
 		filepath.Walk(".stashes", func(path string, info os.FileInfo, err error) error {
 			if err == nil && info.IsDir() && path != ".stashes" && filepath.Dir(path) == ".stashes" {
 				row, _ := gtk.ListBoxRowNew()
@@ -150,7 +145,7 @@ func newBtn(l string) *gtk.Button { b, _ := gtk.ButtonNewWithLabel(l); return b 
 func label(box *gtk.Box, t string) { l, _ := gtk.LabelNew(t); l.SetXAlign(0); box.PackStart(l, false, false, 5) }
 func applyCSS() {
 	provider, _ := gtk.CssProviderNew()
-	provider.LoadFromData("label { font-weight: bold; padding: 5px; } textView { font-family: monospace; font-size: 15px; padding: 10px; }")
+	provider.SetData("label { font-weight: bold; padding: 5px; } textView { font-family: monospace; font-size: 14px; }")
 	screen, _ := gdk.ScreenGetDefault()
 	gtk.AddProviderForScreen(screen, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 }

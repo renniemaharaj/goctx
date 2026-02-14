@@ -9,7 +9,8 @@ var singleton *rod.Browser
 
 func Get() *rod.Browser {
 	if singleton == nil {
-		l := launcher.New().Headless(false).MustLaunch()
+		// Use UserMode to bypass "Untrusted Browser" alerts
+		l := launcher.NewUserMode().Leakless(true).MustLaunch()
 		singleton = rod.New().ControlURL(l).MustConnect()
 	}
 	return singleton

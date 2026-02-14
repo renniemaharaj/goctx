@@ -11,11 +11,21 @@ import (
 
 func ProcessWithAI(prompt string) (model.ProjectOutput, error) {
 	b := Get()
-	page := b.MustPage("https://aistudio.google.com/app/prompts/new") 
-	textarea := page.MustElement(`textarea, [contenteditable="true"]`).MustWaitVisible()
-	textarea.MustInput(prompt)
-	page.Keyboard.MustType(input.Enter)
-	time.Sleep(10 * time.Second)
+	page := b.MustPage("https://aistudio.google.com/app/prompts/new")
+	page.MustWaitIdle()
+
+	editor := page.MustElement(`div[contenteditable="true"], .prompt-input, textarea`).MustWaitVisible()
+	editor.MustClick()
+
+	// Use KeyActions to simulate Ctrl+A accurately without character literal issues
+	page.KeyActions().Press(input.ControlLeft, input.KeyA).Do()
+	page.Keyboard.Press(input.Backspace)
+
+	editor.MustInput(prompt)
+	time.Sleep(500 * time.Millisecond)
+	page.Keyboard.Press(input.Enter)
+
+	time.Sleep(18 * time.Second)
 	content := page.MustElement("body").MustText()
 	return ExtractProjectState(content)
 }

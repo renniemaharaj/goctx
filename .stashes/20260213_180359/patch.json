@@ -1,7 +1,0 @@
-{
-  "estimated_tokens": 2100,
-  "project_tree": ".\ngo.mod\ngo.sum\nmain.go\ninternal\n  └── overlay\n      └── overlay.go\n      └── x11.go\n  └── config\n      └── config.go\nui\n  └── window.go\nassets\n  └── style.css\n",
-  "files": {
-    "internal/overlay/x11.go": "package overlay\n\nimport (\n\t\"github.com/gotk3/gotk3/gdk\"\n\t\"github.com/gotk3/gotk3/gtk\"\n)\n\ntype X11Overlay struct {\n\twindow *gtk.Window\n}\n\nfunc NewX11Overlay() *X11Overlay {\n\twin, _ := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)\n\n\twin.SetDecorated(false)\n\twin.SetKeepAbove(true)\n\twin.SetAppPaintable(true)\n\twin.SetAcceptFocus(false)\n\twin.SetSkipTaskbarHint(true)\n\twin.SetSkipPagerHint(true)\n\twin.SetTypeHint(gtk.WINDOW_TYPE_HINT_DOCK)\n\n\t// Enable transparency\n\tscreen, _ := win.GetScreen()\n\tvisual, _ := screen.GetRGBAVisual()\n\tif visual != nil {\n\t\twin.SetVisual(visual)\n\t}\n\n\t// Make background transparent\n\twin.Connect(\"draw\", func(w *gtk.Window, cr *gdk.CairoContext) {\n\t\tcr.SetSourceRGBA(0, 0, 0, 0.5) // 50% black tint\n\t\tcr.Paint()\n\t})\n\n\twin.Fullscreen()\n\n\treturn \u0026X11Overlay{\n\t\twindow: win,\n\t}\n}\n\nfunc (o *X11Overlay) Start() error {\n\to.window.ShowAll()\n\treturn nil\n}\n\nfunc (o *X11Overlay) SetOpacity(val float64) {\n\to.window.SetOpacity(val)\n}\n\nfunc (o *X11Overlay) Show() {\n\to.window.Show()\n}\n\nfunc (o *X11Overlay) Hide() {\n\to.window.Hide()\n}\n"
-  }
-}
