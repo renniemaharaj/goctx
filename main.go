@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
 	"sort"
 	"goctx/internal/apply"
 	"goctx/internal/builder"
@@ -41,8 +43,9 @@ func navigateStash(dir string) {
 	if len(list) == 0 {
 		fmt.Println("No stashes found."); return
 	}
-	// Simple toggle logic for demo: in a real app, track current in meta.json
-	fmt.Printf("Stash found: %s. Use GUI to select specific version or implement index tracking.\n", list[len(list)-1])
+
+	// Current active is handled by internal/stash refs logic
+	fmt.Printf("Navigation [%s] triggered. Implementation: use GUI to select version or 'back' to revert previous stash.\n", dir)
 }
 
 func tidyStashes() {
@@ -52,13 +55,25 @@ func tidyStashes() {
 }
 
 func runBuild() {
-	output, _ := builder.BuildContext(".")
+	output, _ := builder.BuildSelectiveContext(".", "Manual Build")
 	json.NewEncoder(os.Stdout).Encode(output)
 }
 
 func runApply() {
+	data, _ := io.ReadAll(os.Stdin)
+	text := string(data)
+	
+	// Strip markdown backticks if present
+	re := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
+	match := re.FindString(text)
+	if match == "" { match = text }
+
 	var input model.ProjectOutput
-	json.NewDecoder(os.Stdin).Decode(&input)
+	if err := json.Unmarshal([]byte(match), &input); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing JSON: %v\n", err)
+		os.Exit(1)
+	}
+	
 	apply.ApplyPatch(".", input)
-	fmt.Println("Done.")
+	fmt.Println("Patch applied successfully.")
 }

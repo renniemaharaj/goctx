@@ -12,7 +12,11 @@ import (
 	"sync"
 )
 
-const AI_PROMPT_HEADER = `You are an AI developer agent. Return ONLY JSON:\n{\n  "short_description": "summary",\n  "files": { "path": "content" }\n}`
+const AI_PROMPT_HEADER = `You are an AI developer agent. Return ONLY JSON.
+For surgical updates to existing files, use the format:
+"path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>> REPLACE"
+
+Otherwise, provide the full file content for new files.`
 
 func LoadIgnorePatterns(root string) []string {
 	patterns := []string{".git", ".stashes", "node_modules", "goctx", "go.sum", "ctx.json", ".exe", ".bin"}
@@ -49,7 +53,6 @@ func BuildSelectiveContext(root string, description string) (model.ProjectOutput
 	var allPaths []string
 	totalChars := 0
 
-	// Worker Pool
 	for i := 0; i < 8; i++ {
 		go func() {
 			for dir := range dirChan {
@@ -96,8 +99,6 @@ func BuildSelectiveContext(root string, description string) (model.ProjectOutput
 
 	wg.Add(1)
 	dirChan <- absRoot
-
-	// Wait for all discoveries to finish
 	wg.Wait()
 	close(dirChan)
 

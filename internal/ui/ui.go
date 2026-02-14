@@ -6,6 +6,7 @@ import (
 	"goctx/internal/apply"
 	"goctx/internal/builder"
 	"goctx/internal/model"
+	"goctx/internal/stash"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -119,7 +120,9 @@ func Run() {
 	})
 
 	pendingPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
-		if row == nil { return }
+		if row == nil {
+			return
+		}
 		stashPanel.List.UnselectAll()
 		idx := row.GetIndex()
 		renderDiff(pendingPatches[idx], "Pending Patch Preview")
@@ -128,11 +131,15 @@ func Run() {
 	})
 
 	stashPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
-		if row == nil { return }
+		if row == nil {
+			return
+		}
 		pendingPanel.List.UnselectAll()
 		lblWidget, _ := row.GetChild()
 		lbl, _ := lblWidget.(*gtk.Label)
 		txt, _ := lbl.GetText()
+		// Clean label if it has (ACTIVE) tag
+		txt = strings.TrimSuffix(txt, " (ACTIVE)")
 		data, err := os.ReadFile(filepath.Join(".stashes", txt, "patch.json"))
 		if err == nil && json.Unmarshal(data, &selectedStash) == nil {
 			renderDiff(selectedStash, "Stash: "+txt)
@@ -189,10 +196,14 @@ func Run() {
 
 func countStashes() int {
 	entries, err := os.ReadDir(".stashes")
-	if err != nil { return 0 }
+	if err != nil {
+		return 0
+	}
 	count := 0
 	for _, e := range entries {
-		if e.IsDir() { count++ }
+		if e.IsDir() {
+			count++
+		}
 	}
 	return count
 }
@@ -213,10 +224,17 @@ func resetView() {
 func refreshStashes(list *gtk.ListBox) {
 	list.GetChildren().Foreach(func(item interface{}) { list.Remove(item.(gtk.IWidget)) })
 	os.MkdirAll(".stashes", 0755)
+	activeID := stash.GetActiveID(".")
+
 	filepath.Walk(".stashes", func(path string, info os.FileInfo, err error) error {
 		if err == nil && info.IsDir() && path != ".stashes" && filepath.Dir(path) == ".stashes" {
+			name := filepath.Base(path)
 			row, _ := gtk.ListBoxRowNew()
-			lbl, _ := gtk.LabelNew(filepath.Base(path))
+			display := name
+			if name == activeID {
+				display += " (ACTIVE)"
+			}
+			lbl, _ := gtk.LabelNew(display)
 			row.Add(lbl)
 			list.Add(row)
 		}
@@ -243,7 +261,9 @@ func setupTags(buffer *gtk.TextBuffer) {
 
 func getTag(n string) *gtk.TextTag {
 	tab, err := statsBuf.GetTagTable()
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	tag, _ := tab.Lookup(n)
 	return tag
 }
@@ -251,7 +271,7 @@ func getTag(n string) *gtk.TextTag {
 func renderDiff(p model.ProjectOutput, title string) {
 	statsBuf.SetText("")
 	statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("=== %s ===\n\n", strings.ToUpper(title)), getTag("header"))
-	
+
 	if p.ProjectTree != "" {
 		statsBuf.Insert(statsBuf.GetEndIter(), "PROJECT STRUCTURE:\n")
 		statsBuf.Insert(statsBuf.GetEndIter(), p.ProjectTree+"\n")
@@ -260,25 +280,62 @@ func renderDiff(p model.ProjectOutput, title string) {
 
 	dmp := diffmatchpatch.New()
 	var keys []string
-	for k := range p.Files { keys = append(keys, k) }
+	for k := range p.Files {
+		keys = append(keys, k)
+	}
 	sort.Strings(keys)
 
 	renderCount := 0
 	const limit = 10
 
 	for _, path := range keys {
-		if renderCount >= limit { break }
+		if renderCount >= limit {
+			break
+		}
 		newContent := p.Files[path]
-		if !utf8.ValidString(newContent) { continue }
+		if !utf8.ValidString(newContent) {
+			continue
+		}
 
 		statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("FILE: %s\n", path), getTag("header"))
-		
+
 		old, _ := os.ReadFile(path)
 		oldStr := string(old)
-		if !utf8.ValidString(oldStr) { oldStr = "" }
+		if !utf8.ValidString(oldStr) {
+			oldStr = ""
+		}
+
+		// Intercept surgical blocks to prevent garbled diffs
+		if strings.Contains(newContent, "<<<<<< SEARCH") && strings.Contains(newContent, "======") {
+			statsBuf.InsertWithTag(statsBuf.GetEndIter(), "--- SURGICAL MODIFICATION ---\n", getTag("header"))
+			
+			sStart := strings.Index(newContent, "<<<<<< SEARCH")
+			div := strings.Index(newContent, "======")
+			rEnd := strings.Index(newContent, ">>>>>> REPLACE")
+
+			if sStart != -1 && div != -1 && rEnd != -1 {
+				searchBlock := strings.Trim(newContent[sStart+13:div], "\n\r ")
+				replaceBlock := strings.Trim(newContent[div+6:rEnd], "\n\r ")
+
+				statsBuf.Insert(statsBuf.GetEndIter(), "[EXISTING CODE]:\n")
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), searchBlock+"\n", getTag("deleted"))
+
+				statsBuf.Insert(statsBuf.GetEndIter(), "\n[REPLACEMENT]:\n")
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), replaceBlock+"\n", getTag("added"))
+			
+				// Live match check against disk
+				if !strings.Contains(oldStr, searchBlock) {
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\n⚠️ ERROR: Match not found! This surgical patch will fail.\n", getTag("header"))
+				} else {
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\n✅ READY: Exact match found.\n", getTag("added"))
+				}
+			}
+			statsBuf.Insert(statsBuf.GetEndIter(), "\n---\n\n")
+			renderCount++
+			continue
+		}
 
 		diffs := dmp.DiffMain(oldStr, newContent, false)
-		
 		if len(diffs) == 1 && diffs[0].Type == diffmatchpatch.DiffEqual {
 			statsBuf.Insert(statsBuf.GetEndIter(), newContent+"\n\n")
 		} else {
