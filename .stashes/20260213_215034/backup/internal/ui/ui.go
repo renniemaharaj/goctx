@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 var (
@@ -25,61 +24,66 @@ var (
 	stashList       *gtk.ListBox
 	pendingList     *gtk.ListBox
 	pendingPatches  []model.ProjectOutput
-	selectedStash   model.ProjectOutput
-	win             *gtk.Window
 )
 
 func Run() {
 	gtk.Init(nil)
-	win, _ = gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
+
+	win, _ := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	win.SetTitle("GoCtx Manager")
-	win.SetDefaultSize(1400, 900)
+	win.SetDefaultSize(1300, 850)
 	win.Connect("destroy", gtk.MainQuit)
 
 	hmain, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 
+	// --- LEFT BAR ---
 	leftBar, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 15)
 	leftBar.SetMarginStart(15); leftBar.SetMarginEnd(15); leftBar.SetMarginTop(15)
-	leftBar.SetSizeRequest(320, -1)
+	leftBar.SetSizeRequest(300, -1)
 
 	btnBuild := newBtn("CURRENT CONTEXT")
 	btnCopy  := newBtn("COPY CONTEXT")
-	btnApplyPatch := newBtn("APPLY SELECTED PATCH")
-	btnApplyStash := newBtn("APPLY SELECTED STASH")
-	btnApplyPatch.SetSensitive(false); btnApplyStash.SetSensitive(false)
+	btnApply := newBtn("APPLY SELECTED PATCH")
+	btnApply.SetSensitive(false)
 
 	leftBar.PackStart(btnBuild, false, false, 0)
 	leftBar.PackStart(btnCopy, false, false, 0)
-	leftBar.PackStart(btnApplyPatch, false, false, 0)
-	leftBar.PackStart(btnApplyStash, false, false, 0)
+	leftBar.PackStart(btnApply, false, false, 0)
 
 	label(leftBar, "PENDING PATCHES")
 	swPending, _ := gtk.ScrolledWindowNew(nil, nil)
-	swPending.SetShadowType(gtk.SHADOW_IN); swPending.SetSizeRequest(-1, 200)
-	pendingList, _ = gtk.ListBoxNew(); swPending.Add(pendingList)
-	leftBar.PackStart(swPending, false, false, 0)
+	pendingList, _ = gtk.ListBoxNew()
+	swPending.Add(pendingList)
+	leftBar.PackStart(swPending, true, true, 0)
 
 	label(leftBar, "STASHES")
 	swStash, _ := gtk.ScrolledWindowNew(nil, nil)
-	swStash.SetShadowType(gtk.SHADOW_IN)
-	stashList, _ = gtk.ListBoxNew(); swStash.Add(stashList)
+	stashList, _ = gtk.ListBoxNew()
+	swStash.Add(stashList)
 	leftBar.PackStart(swStash, true, true, 0)
 
+	// --- RIGHT CONTENT ---
 	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
 	rightStack.SetMarginStart(20); rightStack.SetMarginEnd(20); rightStack.SetMarginTop(15)
 
 	label(rightStack, "CONTEXT TOOL GUI (GOCTX)")
 	statsScroll, _ := gtk.ScrolledWindowNew(nil, nil)
+	
 	statsView, _ := gtk.TextViewNew()
-	statsView.SetMonospace(true); statsView.SetEditable(false)
-	statsView.SetLeftMargin(25); statsView.SetTopMargin(25)
+	statsView.SetMonospace(true)
+	statsView.SetEditable(false)
+	// Add padding inside the text area
+	statsView.SetLeftMargin(15)
+	statsView.SetTopMargin(15)
+	
 	statsBuf, _ = statsView.GetBuffer()
 	statsScroll.Add(statsView)
 	rightStack.PackStart(statsScroll, true, true, 0)
 
-	win.Connect("button-press-event", func() {
-		pendingList.UnselectAll(); stashList.UnselectAll()
-		btnApplyPatch.SetSensitive(false); btnApplyStash.SetSensitive(false)
+	win.Connect("button-press-event", func(w *gtk.Window, event *gdk.Event) {
+		pendingList.UnselectAll()
+		stashList.UnselectAll()
+		btnApply.SetSensitive(false)
 	})
 
 	btnBuild.Connect("clicked", func() {
@@ -87,7 +91,7 @@ func Run() {
 			out, err := builder.BuildSelectiveContext(".", nil)
 			if err == nil {
 				activeContext = out; currentPayload = string(mustMarshal(out))
-				glib.IdleAdd(func() { statsBuf.SetText(formatStats(activeContext, "Current Workspace State")) })
+				glib.IdleAdd(func() { statsBuf.SetText(formatStats(activeContext, "Active Workspace")) })
 			}
 		}()
 	})
@@ -95,41 +99,42 @@ func Run() {
 	btnCopy.Connect("clicked", func() {
 		clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
 		clip.SetText(currentPayload); lastClipboard = currentPayload
-		confirmAction("Context JSON copied to system clipboard.")
 	})
 
 	pendingList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row == nil { return }
+		stashList.UnselectAll()
 		idx := row.GetIndex()
 		if idx < len(pendingPatches) {
-			statsBuf.SetText(formatStats(pendingPatches[idx], "Pending Patch Preview"))
-			btnApplyPatch.SetSensitive(true); btnApplyStash.SetSensitive(false)
+			statsBuf.SetText(formatStats(pendingPatches[idx], "Pending Patch"))
+			btnApply.SetSensitive(true)
 		}
 	})
 
 	stashList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row == nil { return }
-		lblWidget, _ := row.GetChild(); lbl, _ := lblWidget.(*gtk.Label); txt, _ := lbl.GetText()
+		pendingList.UnselectAll()
+		lblWidget, _ := row.GetChild()
+		lbl, _ := lblWidget.(*gtk.Label)
+		txt, _ := lbl.GetText()
 		data, err := os.ReadFile(filepath.Join(".stashes", txt, "patch.json"))
-		if err == nil && json.Unmarshal(data, &selectedStash) == nil {
-			statsBuf.SetText(formatStats(selectedStash, "Stash: "+txt))
-			btnApplyStash.SetSensitive(true); btnApplyPatch.SetSensitive(false)
+		if err == nil {
+			var p model.ProjectOutput
+			if err := json.Unmarshal(data, &p); err == nil {
+				statsBuf.SetText(formatStats(p, "Stash: "+txt))
+				btnApply.SetSensitive(false)
+			}
 		}
 	})
 
-	btnApplyPatch.Connect("clicked", func() {
-		if confirmAction("Apply selected patch?") {
-			row := pendingList.GetSelectedRow()
-			apply.ApplyPatch(".", pendingPatches[row.GetIndex()])
-			refreshStashes(stashList); statsBuf.SetText("SYSTEM: Patch applied.")
-		}
-	})
-
-	btnApplyStash.Connect("clicked", func() {
-		if confirmAction("Restore selected stash?") {
-			apply.ApplyPatch(".", selectedStash)
-			refreshStashes(stashList); statsBuf.SetText("SYSTEM: Stash restored.")
-		}
+	btnApply.Connect("clicked", func() {
+		row := pendingList.GetSelectedRow()
+		if row == nil { return }
+		patch := pendingPatches[row.GetIndex()]
+		apply.ApplyPatch(".", patch)
+		btnApply.SetSensitive(false)
+		refreshStashes(stashList)
+		statsBuf.SetText("ACTION COMPLETE: Files updated/removed.")
 	})
 
 	go func() {
@@ -139,45 +144,19 @@ func Run() {
 				clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
 				text, err := clip.WaitForText()
 				if err == nil && text != "" && text != lastClipboard {
-					lastClipboard = text; processClipboard(text)
+					lastClipboard = text
+					processClipboard(text)
 				}
 			})
 		}
 	}()
 
-	hmain.PackStart(leftBar, false, false, 0); hmain.PackStart(rightStack, true, true, 0)
-	refreshStashes(stashList); win.Add(hmain); win.ShowAll(); gtk.Main()
-}
-
-func formatStats(p model.ProjectOutput, title string) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== %s ===\n", strings.ToUpper(title)))
-	sb.WriteString(fmt.Sprintf("TOKENS:  %d  |  FILES: %d\n\n", p.EstimatedTokens, len(p.Files)))
-	sb.WriteString("DIRECTORY TREE:\n")
-	sb.WriteString(ensureUTF8(p.ProjectTree))
-	sb.WriteString("\n\n--- FILE CONTENT PREVIEW ---\n")
-	for f, content := range p.Files {
-		sb.WriteString(fmt.Sprintf("\nFILE: %s\n", f))
-		sb.WriteString(strings.Repeat("━", len(f)+6) + "\n")
-		if content == "" {
-			sb.WriteString("[DELETION INSTRUCTION]\n")
-		} else if !utf8.ValidString(content) {
-			sb.WriteString("[BINARY OR INVALID UTF-8 DATA - PREVIEW HIDDEN]\n")
-		} else {
-			sb.WriteString(content + "\n")
-		}
-	}
-	return sb.String()
-}
-
-func ensureUTF8(s string) string {
-	if utf8.ValidString(s) { return s }
-	return strings.ToValidUTF8(s, "")
-}
-
-func confirmAction(msg string) bool {
-	dlg := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO, msg)
-	resp := dlg.Run(); dlg.Destroy(); return resp == gtk.RESPONSE_YES
+	hmain.PackStart(leftBar, false, false, 0)
+	hmain.PackStart(rightStack, true, true, 0)
+	refreshStashes(stashList)
+	win.Add(hmain)
+	win.ShowAll()
+	gtk.Main()
 }
 
 func processClipboard(text string) {
@@ -189,9 +168,28 @@ func processClipboard(text string) {
 			pendingPatches = append(pendingPatches, patch)
 			row, _ := gtk.ListBoxRowNew()
 			lbl, _ := gtk.LabelNew(fmt.Sprintf("Patch %d (%d files)", len(pendingPatches), len(patch.Files)))
-			row.Add(lbl); pendingList.Add(row); pendingList.ShowAll()
+			row.Add(lbl)
+			pendingList.Add(row)
+			pendingList.ShowAll()
 		}
 	}
+}
+
+func formatStats(p model.ProjectOutput, title string) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("=== %s ===\n", strings.ToUpper(title)))
+	sb.WriteString(fmt.Sprintf("TOKENS:  %d\nFILES:   %d\n\n", p.EstimatedTokens, len(p.Files)))
+	sb.WriteString("DIRECTORY TREE:\n")
+	if p.ProjectTree != "" { sb.WriteString(p.ProjectTree) } else { sb.WriteString("(No tree data available)") }
+	sb.WriteString("\n\nFILES IN SCOPE:\n")
+	for f, content := range p.Files {
+		if content == "" {
+			sb.WriteString("  [DELETE] " + f + "\n")
+		} else {
+			sb.WriteString("  " + f + "\n")
+		}
+	}
+	return sb.String()
 }
 
 func mustMarshal(v interface{}) []byte { b, _ := json.Marshal(v); return b }
