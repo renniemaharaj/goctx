@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 	webview "github.com/webview/webview_go"
@@ -23,76 +24,56 @@ func Run() {
 
 	win, _ := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	win.SetTitle("GoCtx Manager")
-	win.SetDefaultSize(1200, 850)
+	win.SetDefaultSize(1400, 900)
 	win.Connect("destroy", gtk.MainQuit)
 
 	hmain, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 
-	// LEFT BAR
+	// LEFT: VERTICAL BUTTON STACK
 	leftBar, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
 	leftBar.SetMarginStart(10)
 	leftBar.SetMarginEnd(10)
+	leftBar.SetMarginTop(10)
 
 	btnBuild := newBtn("Build Context")
 	btnCopy := newBtn("Copy Context")
 	btnPaste := newBtn("Apply Patch")
 
-	leftBar.PackStart(btnBuild, false, false, 5)
-	leftBar.PackStart(btnCopy, false, false, 5)
-	leftBar.PackStart(btnPaste, false, false, 5)
+	leftBar.PackStart(btnBuild, false, false, 0)
+	leftBar.PackStart(btnCopy, false, false, 0)
+	leftBar.PackStart(btnPaste, false, false, 0)
 
 	label(leftBar, "STASHES")
-	swStash, _ := gtk.ScrolledWindowNew(nil, nil)
 	stashList, _ := gtk.ListBoxNew()
-	swStash.Add(stashList)
-	leftBar.PackStart(swStash, true, true, 0)
+	leftBar.PackStart(stashList, true, true, 0)
 
-	// RIGHT CONTENT
-	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
-	rightStack.SetMarginStart(15)
-	rightStack.SetMarginEnd(15)
+	// RIGHT: SPLIT VIEW (STATS TOP / WEB BOTTOM)
+	rightStack, _ := gtk.PanedNew(gtk.ORIENTATION_VERTICAL)
 
-	label(rightStack, "DASHBOARD")
+	// Stats Area
 	statsScroll, _ := gtk.ScrolledWindowNew(nil, nil)
 	statsView, _ := gtk.TextViewNew()
-	statsView.SetMonospace(true)
 	statsView.SetEditable(false)
 	statsBuf, _ := statsView.GetBuffer()
 	statsScroll.Add(statsView)
-	rightStack.PackStart(statsScroll, true, true, 0)
+	rightStack.Pack1(statsScroll, true, false)
 
-	// INPUT MONITOR
-	inputBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
+	// Webview Logic Panel
+	webContainer, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	urlEntry, _ := gtk.EntryNew()
-	urlEntry.SetPlaceholderText("URL to launch or JSON to parse...")
-	btnRun := newBtn("Go")
-	inputBox.PackStart(urlEntry, true, true, 0)
-	inputBox.PackStart(btnRun, false, false, 0)
-	rightStack.PackStart(inputBox, false, false, 10)
+	urlEntry.SetPlaceholderText("Paste AI URL or JSON content here...")
+	webContainer.PackStart(urlEntry, false, false, 5)
 
-	// SELECTION LOGIC
-	stashList.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
-		if row == nil {
-			return
-		}
-		lblWidget, _ := row.GetChild()
-		lbl, _ := lblWidget.(*gtk.Label)
-		txt, _ := lbl.GetText()
+	// Placeholder for where the Webview lives (it is a native overlay)
+	webArea, _ := gtk.DrawingAreaNew()
+	webArea.SetSizeRequest(-1, 400)
+	webContainer.PackStart(webArea, true, true, 0)
 
-		path := filepath.Join(".stashes", txt, "patch.json")
-		data, err := os.ReadFile(path)
-		if err == nil {
-			currentPayload = string(data)
-			var p model.ProjectOutput
-			if err := json.Unmarshal(data, &p); err == nil {
-				statsBuf.SetText(formatStats(p, "Stash: "+txt))
-			}
-		}
-	})
+	rightStack.Pack2(webContainer, true, true)
 
-	// BUILD LOGIC
+	// LOGIC: BUILD
 	btnBuild.Connect("clicked", func() {
-		statsBuf.SetText("Scanning project files...")
+		statsBuf.SetText("Building...")
 		go func() {
 			out, err := builder.BuildSelectiveContext(".", nil)
 			if err == nil {
@@ -100,17 +81,25 @@ func Run() {
 				js, _ := json.Marshal(out)
 				currentPayload = string(js)
 				glib.IdleAdd(func() {
-					statsBuf.SetText(formatStats(activeContext, "Current Workspace"))
+					statsBuf.SetText(formatStats(activeContext))
 				})
 			}
 		}()
 	})
 
-	btnRun.Connect("clicked", func() {
+	// LOGIC: COPY
+	btnCopy.Connect("clicked", func() {
+		clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
+		clip.SetText(currentPayload)
+	})
+
+	// LOGIC: WEBVIEW INTEGRATION
+	urlEntry.Connect("activate", func() {
 		txt, _ := urlEntry.GetText()
 		if strings.HasPrefix(txt, "http") {
 			go launchWebview(txt)
 		} else {
+			// If it is not a URL, treat it as a JSON input monitor
 			monitorInput(txt, statsBuf)
 		}
 	})
@@ -124,22 +113,12 @@ func Run() {
 	gtk.Main()
 }
 
-func formatStats(p model.ProjectOutput, source string) string {
+func formatStats(p model.ProjectOutput) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("SOURCE: %s\n", source))
+	sb.WriteString(fmt.Sprintf("PROJ: %d FILES\n", len(p.Files)))
 	sb.WriteString(fmt.Sprintf("TOKENS: %d\n", p.EstimatedTokens))
-	sb.WriteString(fmt.Sprintf("FILES:  %d\n", len(p.Files)))
-	sb.WriteString("\n--- DIRECTORY TREE ---\n")
-	if p.ProjectTree != "" {
-		sb.WriteString(p.ProjectTree)
-	} else {
-		sb.WriteString("[Tree Data Missing]")
-	}
-
-	sb.WriteString("\n\n--- FILE LIST ---\n")
-	for f := range p.Files {
-		sb.WriteString("  " + f + "\n")
-	}
+	sb.WriteString("\nDIRECTORY STRUCTURE:\n")
+	sb.WriteString(p.ProjectTree)
 	return sb.String()
 }
 
@@ -148,17 +127,20 @@ func monitorInput(input string, buf *gtk.TextBuffer) {
 	match := re.FindString(input)
 	if match != "" {
 		var patch model.ProjectOutput
-		if err := json.Unmarshal([]byte(match), &patch); err == nil {
-			buf.SetText(formatStats(patch, "Incoming AI Patch"))
+		json.Unmarshal([]byte(match), &patch)
+		list := "FILES TO CHANGE:\n"
+		for f := range patch.Files {
+			list += "- " + f + "\n"
 		}
+		buf.SetText(list + "\nClick Apply Patch to finalize.")
 	}
 }
 
 func launchWebview(url string) {
 	glib.IdleAdd(func() {
 		w := webview.New(false)
-		w.SetTitle("AI Chat")
-		w.SetSize(1100, 800, webview.Hint(0))
+		w.SetTitle("AI Interface")
+		w.SetSize(1000, 800, webview.Hint(0))
 		w.Navigate(url)
 		w.Run()
 	})
