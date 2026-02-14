@@ -34,6 +34,7 @@ var (
 	statusLabel    *gtk.Label
 	btnApplyPatch  *gtk.Button
 	btnApplyStash  *gtk.Button
+	lastStashCount int
 )
 
 func Run() {
@@ -178,8 +179,14 @@ func Run() {
 
 	go func() {
 		for {
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 			glib.IdleAdd(func() {
+				currentCount := countStashes()
+				if currentCount != lastStashCount {
+					refreshStashes(stashList)
+					lastStashCount = currentCount
+				}
+
 				clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
 				text, _ := clip.WaitForText()
 				if text != "" && text != lastClipboard {
@@ -191,9 +198,20 @@ func Run() {
 	}()
 
 	refreshStashes(stashList)
+	lastStashCount = countStashes()
 	win.Add(vmain)
 	win.ShowAll()
 	gtk.Main()
+}
+
+func countStashes() int {
+	entries, err := os.ReadDir(".stashes")
+	if err != nil { return 0 }
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() { count++ }
+	}
+	return count
 }
 
 func clearAllSelections() {
@@ -210,21 +228,18 @@ func resetView() {
 }
 
 func refreshStashes(list *gtk.ListBox) {
-	glib.IdleAdd(func() bool {
-		list.GetChildren().Foreach(func(item interface{}) { list.Remove(item.(gtk.IWidget)) })
-		os.MkdirAll(".stashes", 0755)
-		filepath.Walk(".stashes", func(path string, info os.FileInfo, err error) error {
-			if err == nil && info.IsDir() && path != ".stashes" && filepath.Dir(path) == ".stashes" {
-				row, _ := gtk.ListBoxRowNew()
-				lbl, _ := gtk.LabelNew(filepath.Base(path))
-				row.Add(lbl)
-				list.Add(row)
-			}
-			return nil
-		})
-		list.ShowAll()
-		return false
+	list.GetChildren().Foreach(func(item interface{}) { list.Remove(item.(gtk.IWidget)) })
+	os.MkdirAll(".stashes", 0755)
+	filepath.Walk(".stashes", func(path string, info os.FileInfo, err error) error {
+		if err == nil && info.IsDir() && path != ".stashes" && filepath.Dir(path) == ".stashes" {
+			row, _ := gtk.ListBoxRowNew()
+			lbl, _ := gtk.LabelNew(filepath.Base(path))
+			row.Add(lbl)
+			list.Add(row)
+		}
+		return nil
 	})
+	list.ShowAll()
 }
 
 func setupTags(buffer *gtk.TextBuffer) {
@@ -281,7 +296,6 @@ func renderDiff(p model.ProjectOutput, title string) {
 
 		diffs := dmp.DiffMain(oldStr, newContent, false)
 		
-		// If the strings are identical, just show the content (no colors needed)
 		if len(diffs) == 1 && diffs[0].Type == diffmatchpatch.DiffEqual {
 			statsBuf.Insert(statsBuf.GetEndIter(), newContent+"\n\n")
 		} else {

@@ -1,0 +1,11 @@
+{
+  "short_description": "Remove browser package and update agent instructions",
+  "estimated_tokens": 0,
+  "project_tree": "",
+  "files": {
+    "agent-instructions.md": "# GoCtx Project Instructions\n\n## Project Overview\nHybrid Orchestrator bridging local dev and AI. GTK Dashboard + Local API Bridge. The tool manages project context, detects AI-generated patches via clipboard, and manages stashes for version safety.\n\n## UI Structure (LOCKED)\n- **Left Sidebar**: \n    - Actions: [CURRENT CONTEXT], [COPY CONTEXT], [APPLY SELECTED PATCH], [APPLY SELECTED STASH].\n    - Lists: PENDING PATCHES (from clipboard), STASHES (local history).\n- **Right Dashboard**: Monospace display for Project Trees, Diff Previews (limited to first 10 files for performance), and status logs.\n\n## Rules \u0026 Constraints\n- **Core Stability**: Do NOT break the file/folder tree rendering or the diffing logic. These are critical for visualizing changes before application.\n- **Context Building**: Use `.ctxignore` to exclude binary files, `.git`, `.stashes`, and large dependency folders (e.g., `node_modules`).\n- **Patching \u0026 Stashes**: \n    - Patches detected from clipboard must be applied accurately to the local filesystem.\n    - Every application must create a Stash in `.stashes` for rollback capability.\n- **Diffing**: Use `diffmatchpatch` for accurate, color-coded visual feedback in the GTK `TextView`.\n- **No Browser**: All AI interactions are manual (copy context -\u003e paste to AI -\u003e copy AI response -\u003e auto-detect in GUI).\n\n## Features\n- **Clipboard Monitoring**: UI polls the clipboard for JSON matching the `ProjectOutput` schema.\n- **Stash Auto-Refresh**: UI monitors the `.stashes` directory count and refreshes the list automatically if external changes (like `tidy`) occur.\n- **Preview Limits**: To maintain UI responsiveness, only the first 10 modified files are rendered in the preview pane.",
+    "go.mod": "module goctx\n\ngo 1.25.3\n\nrequire (\n\tgithub.com/gotk3/gotk3 v0.6.5-0.20251124190141-e7a9e823ca35\n\tgithub.com/sergi/go-diff v1.4.0\n\tgithub.com/webview/webview_go v0.0.0-20240831120633-6173450d4dd6\n)\n",
+    "internal/browser/automation.go": "",
+    "internal/browser/browser.go": ""
+  }
+}
