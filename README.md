@@ -25,18 +25,6 @@ GoCtx supports standard streams for seamless integration between tools:
   custom-generator-tool | go run main.go apply
   ```
 
-## Stash Management
-
-- **Navigation**: Move through your history of changes using the command line:
-  ```bash
-  go run main.go back
-  go run main.go forward
-  ```
-- **Tidy**: Clean up the stash history and reset the `.stashes` directory:
-  ```bash
-  go run main.go tidy
-  ```
-
 ## Usage
 
 1. Run the dashboard:

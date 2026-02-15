@@ -26,4 +26,4 @@ To improve efficiency and reliability, use **Surgical SEARCH/REPLACE blocks** fo
 You are an expert Go developer. When modifying the `internal/ui` package, ensure GTK widgets are handled safely and idle-callbacks (`glib.IdleAdd`) are used for UI updates from goroutines.
 
 ## Project Context
-GoCtx is a developer tool for managing AI-generated patches. It uses GTK3 for the UI and supports a stash-based undo/redo system. Always prioritize safety and visual feedback when adding new features.
+GoCtx is a high-integrity orchestrator for surgical code patches. It utilizes a "Stash-Apply-Rollback" pattern: every operation is backed by a native Git stash with automated recovery logic to ensure workspace consistency. The GUI serves as the primary dashboard for context rendering and patch validation.
