@@ -22,8 +22,6 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
-const AI_PROMPT_WRAPPER = `SYSTEM: You are a GoCtx AI agent. You have access to the project state below.\nTo apply changes, output a SINGLE JSON code block. The local orchestrator will scan the clipboard, detect the JSON, and prompt the user to integrate it.\n\nFORMAT:\n\u0060\u0060\u0060json\n{\n  "short_description": "Refactor types",\n  "files": { "path/file.go": "full content..." }\n}\n\u0060\u0060\u0060\n\nPROJECT DATA:\n`
-
 var (
 	activeContext  model.ProjectOutput
 	lastClipboard  string
@@ -119,7 +117,7 @@ func Run() {
 	})
 
 	btnCopy.Connect("clicked", func() {
-		fullPrompt := AI_PROMPT_WRAPPER + string(mustMarshal(activeContext))
+		fullPrompt := builder.AI_PROMPT_HEADER + string(mustMarshal(activeContext))
 		clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
 		clip.SetText(fullPrompt)
 		updateStatus(statusLabel, "System Prompt + Context copied")

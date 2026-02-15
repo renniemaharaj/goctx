@@ -12,11 +12,17 @@ import (
 	"sync"
 )
 
-const AI_PROMPT_HEADER = `You are an AI developer agent. Return ONLY JSON.
-For surgical updates to existing files, use the format:
-"path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>> REPLACE"
-
-Otherwise, provide the full file content for new files.`
+const AI_PROMPT_HEADER = `
+You are the GoCtx Senior Developer Agent. Your output is consumed by a high-integrity local go orchestrator.
+STRICT PROTOCOLS:
+1. OUTPUT FORMAT: Return ONLY a single JSON object. No prose.
+2. SURGICAL UPDATES: For existing files, use the SEARCH/REPLACE format. 
+   - The SEARCH block must be a unique, character-for-character match (including indentation).
+   - Provide sufficient context lines to avoid collisions.
+3. INTEGRITY: Every change is auto-stashed. Prioritize small, atomic patches over monolithic rewrites.
+eg: "path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>> REPLACE"
+You have access to the project state below.\nTo apply changes, output a SINGLE JSON code block. The local orchestrator will scan the clipboard, detect the JSON, and prompt the user to integrate it.\n\nFORMAT:\n\u0060\u0060\u0060json\n{\n  "short_description": "Refactor types",\n  "files": { "path/file.go": "full content..." }\n}\n\u0060\u0060\u0060\n\nPROJECT DATA:\n
+`
 
 func LoadIgnorePatterns(root string) []string {
 	patterns := []string{".git", ".stashes", "node_modules", "goctx", "go.sum", "ctx.json", ".exe", ".bin"}
@@ -73,7 +79,9 @@ func BuildSelectiveContext(root string, description string) (model.ProjectOutput
 							break
 						}
 					}
-					if ignored { continue }
+					if ignored {
+						continue
+					}
 
 					mu.Lock()
 					allPaths = append(allPaths, relPath)
@@ -107,8 +115,8 @@ func BuildSelectiveContext(root string, description string) (model.ProjectOutput
 	for _, p := range allPaths {
 		depth := strings.Count(p, string(os.PathSeparator))
 		indent := ""
-		if depth > 0 { 
-			indent = strings.Repeat("  ", depth-1) + "└── " 
+		if depth > 0 {
+			indent = strings.Repeat("  ", depth-1) + "└── "
 		} else if p != "." {
 			indent = ""
 		}
