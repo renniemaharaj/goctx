@@ -185,7 +185,14 @@ func Run() {
 	})
 
 	btnApplyPatch.Connect("clicked", func() {
-		if confirmAction(win, "Apply selected patch?") {
+		// Check for dirty state to warn user about auto-stashing
+		stat, _ := exec.Command("git", "status", "--porcelain").Output()
+		message := "Apply selected patch?"
+		if len(strings.TrimSpace(string(stat))) > 0 {
+			message = "Workspace is DIRTY. Current changes will be STASHED before applying. Proceed?"
+		}
+
+		if confirmAction(win, message) {
 			row := pendingPanel.List.GetSelectedRow()
 			if row != nil {
 				idx := row.GetIndex()
@@ -194,7 +201,7 @@ func Run() {
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
 					pendingPanel.List.Remove(row)
 
-					updateStatus(statusLabel, "Patch applied and removed from pending")
+					updateStatus(statusLabel, "Patch applied; previous state stashed")
 					clearAllSelections()
 					refreshStashes(stashPanel.List)
 					btnCommit.SetSensitive(true)
