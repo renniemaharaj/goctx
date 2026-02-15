@@ -9,6 +9,7 @@ import (
 	"goctx/internal/patch"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -334,29 +335,63 @@ func getTag(n string) *gtk.TextTag {
 }
 
 func processClipboard(text string) {
-	re := regexp.MustCompile("(?s)```json\n(.*?)\n```")
-	matches := re.FindAllStringSubmatch(text, -1)
-	for _, m := range matches {
-		var patch model.ProjectOutput
-		if err := json.Unmarshal([]byte(m[1]), &patch); err == nil {
-			if len(patch.Files) > 0 {
-				glib.IdleAdd(func() {
-					pendingPatches = append(pendingPatches, patch)
-					row, _ := gtk.ListBoxRowNew()
-					desc := patch.ShortDescription
-					if desc == "" {
-						desc = fmt.Sprintf("Patch with %d files", len(patch.Files))
-					}
-					lbl, _ := gtk.LabelNew(fmt.Sprintf("[%s] %s", time.Now().Format("15:04"), desc))
-					lbl.SetXAlign(0)
-					row.Add(lbl)
-					pendingPanel.List.Add(row)
-					pendingPanel.List.ShowAll()
-					updateStatus(statusLabel, "New patch detected in clipboard")
-				})
-			}
+	var input model.ProjectOutput
+
+	// 1. Try JSON extraction
+	reJSON := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
+	jsonMatch := reJSON.FindString(text)
+
+	if jsonMatch != "" && json.Unmarshal([]byte(jsonMatch), &input) == nil {
+		// Successfully parsed JSON
+	} else if strings.Contains(text, "<<<<<< SEARCH") && strings.Contains(text, "======") {
+		// 2. Fallback: Raw surgical block - try to find a file path header
+		path := "unknown_file.go"
+		rePath := regexp.MustCompile(`(?i)FILE:\s*([^\s\n]+)`)
+		pathMatch := rePath.FindStringSubmatch(text)
+		if len(pathMatch) > 1 {
+			path = pathMatch[1]
 		}
+
+		input = model.ProjectOutput{
+			ShortDescription: "Manual: " + filepath.Base(path),
+			Files: map[string]string{
+				path: text,
+			},
+		}
+	} else {
+		return
 	}
+
+	// Add to list with Trash Icon
+	pendingPatches = append(pendingPatches, input)
+	row, _ := gtk.ListBoxRowNew()
+	hbox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
+
+	lbl, _ := gtk.LabelNew(input.ShortDescription)
+	if input.ShortDescription == "" {
+		lbl.SetText(fmt.Sprintf("Patch %d", len(pendingPatches)))
+	}
+	lbl.SetXAlign(0)
+	hbox.PackStart(lbl, true, true, 5)
+
+	delBtn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_MENU)
+	delBtn.SetRelief(gtk.RELIEF_NONE)
+	delBtn.Connect("clicked", func() {
+		cIdx := row.GetIndex()
+		if cIdx >= 0 && cIdx < len(pendingPatches) {
+			pendingPatches = append(pendingPatches[:cIdx], pendingPatches[cIdx+1:]...)
+			pendingPanel.List.Remove(row)
+			resetView()
+			updateStatus(statusLabel, "Patch removed")
+		}
+	})
+
+	hbox.PackEnd(delBtn, false, false, 2)
+	row.Add(hbox)
+
+	pendingPanel.List.Add(row)
+	pendingPanel.List.ShowAll()
+	updateStatus(statusLabel, "New patch detected")
 }
 
 func renderDiff(p model.ProjectOutput, title string) {
