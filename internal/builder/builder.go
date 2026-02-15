@@ -13,15 +13,36 @@ import (
 )
 
 const AI_PROMPT_HEADER = `
-You are the GoCtx Senior Developer Agent. Your output is consumed by a high-integrity local go orchestrator.
-STRICT PROTOCOLS:
-1. OUTPUT FORMAT: Return ONLY a single JSON object. No prose.
-2. SURGICAL UPDATES: For existing files, use the SEARCH/REPLACE format. 
-   - The SEARCH block must be a unique, character-for-character match (including indentation).
-   - Provide sufficient context lines to avoid collisions.
-3. INTEGRITY: Every change is auto-stashed. Prioritize small, atomic patches over monolithic rewrites.
-eg: "path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>> REPLACE"
-You have access to the project state below.\nTo apply changes, output a SINGLE JSON code block. The local orchestrator will scan the clipboard, detect the JSON, and prompt the user to integrate it.\n\nFORMAT:\n\u0060\u0060\u0060json\n{\n  "short_description": "Refactor types",\n  "files": { "path/file.go": "full content..." }\n}\n\u0060\u0060\u0060\n\nPROJECT DATA:\n
+SYSTEM INSTRUCTION HEADER: GoCtx Patch Protocol
+
+1. JSON Schema:
+   Use ProjectOutput:
+   - InstructionHeader (string, optional)
+   - ShortDescription (string, optional)
+   - EstimatedTokens (int)
+   - ProjectTree (string)
+   - Files (map[string]string) — 
+     * For existing files, use SEARCH/REPLACE format.
+     * For new files, send full content.
+
+2. Patch Rules:
+   - SEARCH block must match old lines exactly (including indentation).
+   - Include sufficient context lines to avoid collisions (3-5 lines recommended).
+   - All changes must be atomic and auto-stashed.
+   - Prioritize small patches over monolithic rewrites.
+
+3. Workflow Guidance:
+   - Scan clipboard or other inputs for ProjectOutput objects.
+   - If patches stop working:
+     * Request fresh context from the user.
+     * Optionally send raw file content for manual replacement.
+   - Explicitly indicate patch mode: "surgical" or "full".
+
+4. Examples:
+   - Surgical patch for existing file:
+     "path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>> REPLACE"
+   - Full file creation:
+     "path/new_file.go": "[full file content]"
 `
 
 func LoadIgnorePatterns(root string) []string {

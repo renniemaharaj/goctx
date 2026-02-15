@@ -9,7 +9,6 @@ import (
 
 	"goctx/internal/model"
 	"goctx/internal/patch"
-	"goctx/internal/stash"
 )
 
 func ApplyPatch(root string, input model.ProjectOutput) error {
@@ -17,10 +16,10 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		return fmt.Errorf("no files to apply")
 	}
 
-	_, err := stash.CreateStash(root, input)
-	if err != nil {
-		return err
-	}
+	// _, err := stash.CreateStash(root, input)
+	// if err != nil {
+	// 	return err
+	// }
 
 	for path, content := range input.Files {
 		if !safePath(root, path) {
