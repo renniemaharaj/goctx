@@ -1,13 +1,16 @@
-# GoCtx
+# GoCtx: High-Integrity Context & Patch Orchestrator
 
-GoCtx is a local orchestrator designed to bridge development environments with AI agents. It provides a GTK-based dashboard and a flexible CLI to manage project context and safely apply AI-generated code patches.
+GoCtx is a local orchestrator designed to bridge development environments with AI agents. It provides a GTK-based dashboard and a flexible CLI to manage project context and safely apply AI-generated code patches using a strict **Stash-Apply-Commit** workflow.
 
 ## Core Features
 
 - **Context Construction**: Automatically gathers project files while respecting `.ctxignore` rules.
 - **Surgical Patching**: Supports `SEARCH/REPLACE` blocks for large files, reducing token usage and improving reliability.
-- **Clipboard Monitoring**: Detects AI-generated JSON patches from the clipboard for instant review.
+- **Hybrid Ingestion**: Monitors the clipboard for two distinct formats:
+  1. **Standard JSON**: Full `ProjectOutput` schema with metadata.
+  2. **Raw Surgical Fallback**: Detects `SEARCH/REPLACE` blocks directly. Requires a `FILE: path/to/file` header for target identification.
 - **Safety Stashing**: Automatically creates a native Git stash before applying any changes for instant rollback capability.
+- **Patch Management**: Queues detected patches in the sidebar with a **Surgical Delete (Trash Icon)** to prune the queue without affecting the workspace.
 - **Visual Diffs**: Provides a color-coded preview of changes and validates surgical matches before integration.
 
 ## CLI Interface
@@ -21,22 +24,14 @@ GoCtx supports standard streams for seamless integration between tools:
 - **Piping for Application**: Pipe a JSON context or patch directly into the apply command:
   ```bash
   cat patch.json | go run main.go apply
-  # Or piping from another tool's output
-  custom-generator-tool | go run main.go apply
   ```
 
-## Usage
+## Usage Protocol
 
-1. Run the dashboard:
-
-   ```bash
-   go run main.go gui
-   ```
-
-2. Build context and copy to clipboard using the UI.
-3. Paste the context into an AI agent.
-4. Copy the AI's JSON response.
-5. Review the detected patch in the GoCtx dashboard and click apply.
+1. **Run Dashboard**: `go run main.go gui`
+2. **Build Context**: Generate project state via the UI and copy to the AI agent.
+3. **Sanitize Queue**: Review pending patches in the dashboard. Use the delete button to discard non-viable suggestions.
+4. **Apply & Finalize**: Apply verified patches (triggering an auto-stash) and use the **Commit** button to clear the dirty state.
 
 ## Requirements
 
