@@ -3,6 +3,7 @@ package apply
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -43,7 +44,9 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		}
 
 		if applyErr != nil {
-			return fmt.Errorf("failed at %s: %w", path, applyErr)
+			// High-integrity rollback: restore from the stash created at the start of this operation
+			_ = exec.Command("git", "stash", "pop", "--index").Run()
+			return fmt.Errorf("critical failure at %s; workspace rolled back: %w", path, applyErr)
 		}
 	}
 
