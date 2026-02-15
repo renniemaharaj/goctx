@@ -60,7 +60,7 @@ func Run() {
 	btnCopy := newBtn("COPY CONTEXT")
 	btnApplyPatch = newBtn("APPLY SELECTED PATCH")
 	btnApplyStash = newBtn("APPLY SELECTED STASH")
-	btnCommit = newBtn("COMMIT PATCH")
+	btnCommit = newBtn("GIT COMMIT")
 
 	// btnCommit.SetSensitive(false)
 	btnApplyPatch.SetSensitive(false)
