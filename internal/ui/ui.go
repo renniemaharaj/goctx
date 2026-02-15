@@ -9,7 +9,6 @@ import (
 	"goctx/internal/patch"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -36,6 +35,7 @@ var (
 	statusLabel    *gtk.Label
 	btnApplyPatch  *gtk.Button
 	btnApplyStash  *gtk.Button
+	btnCommit      *gtk.Button
 	lastStashCount int
 )
 
@@ -59,6 +59,9 @@ func Run() {
 	btnCopy := newBtn("COPY CONTEXT")
 	btnApplyPatch = newBtn("APPLY SELECTED PATCH")
 	btnApplyStash = newBtn("APPLY SELECTED STASH")
+	btnCommit = newBtn("COMMIT PATCH")
+
+	// btnCommit.SetSensitive(false)
 	btnApplyPatch.SetSensitive(false)
 	btnApplyStash.SetSensitive(false)
 
@@ -66,6 +69,7 @@ func Run() {
 	leftBar.PackStart(btnCopy, false, false, 0)
 	leftBar.PackStart(btnApplyPatch, false, false, 0)
 	leftBar.PackStart(btnApplyStash, false, false, 0)
+	leftBar.PackEnd(btnCommit, false, false, 0)
 
 	pendingPanel = NewActionPanel("PENDING PATCHES", 200, clearAllSelections)
 	leftBar.PackStart(pendingPanel.Container, false, false, 0)
@@ -141,7 +145,6 @@ func Run() {
 		lbl, _ := lblWidget.(*gtk.Label)
 		fullText, _ := lbl.GetText()
 
-		// Extract stash@{n}
 		re := regexp.MustCompile(`stash@\{\d+\}`)
 		stashRef := re.FindString(fullText)
 
@@ -188,15 +191,13 @@ func Run() {
 				idx := row.GetIndex()
 				err := apply.ApplyPatch(".", pendingPatches[idx])
 				if err == nil {
-					// Remove from slice
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
-
-					// Remove from UI list
 					pendingPanel.List.Remove(row)
 
 					updateStatus(statusLabel, "Patch applied and removed from pending")
 					clearAllSelections()
 					refreshStashes(stashPanel.List)
+					btnCommit.SetSensitive(true)
 				} else {
 					updateStatus(statusLabel, "Error: "+err.Error())
 				}
@@ -204,10 +205,36 @@ func Run() {
 		}
 	})
 
+	btnCommit.Connect("clicked", func() {
+		if confirmAction(win, "Commit all changes?") {
+			exec.Command("git", "add", ".").Run()
+			cmd := exec.Command("git", "commit", "-m", "GoCtx: applied surgical patch")
+			if err := cmd.Run(); err != nil {
+				updateStatus(statusLabel, "Commit failed: "+err.Error())
+			} else {
+				updateStatus(statusLabel, "Changes committed to git")
+				btnCommit.SetSensitive(false)
+				btnCommit.SetVisible(false)
+			}
+		}
+	})
+
+	// Background Monitoring Loop
 	go func() {
 		for {
 			time.Sleep(2 * time.Second)
 			glib.IdleAdd(func() {
+				if btnCommit == nil {
+					return
+				}
+
+				stat, _ := exec.Command("git", "status", "--porcelain").Output()
+				hasChanges := len(strings.TrimSpace(string(stat))) > 0
+				btnCommit.SetVisible(hasChanges)
+				if !hasChanges {
+					btnCommit.SetSensitive(false)
+				}
+
 				currentCount := countStashes()
 				if currentCount != lastStashCount {
 					refreshStashes(stashPanel.List)
@@ -299,6 +326,32 @@ func getTag(n string) *gtk.TextTag {
 	return tag
 }
 
+func processClipboard(text string) {
+	re := regexp.MustCompile("(?s)```json\n(.*?)\n```")
+	matches := re.FindAllStringSubmatch(text, -1)
+	for _, m := range matches {
+		var patch model.ProjectOutput
+		if err := json.Unmarshal([]byte(m[1]), &patch); err == nil {
+			if len(patch.Files) > 0 {
+				glib.IdleAdd(func() {
+					pendingPatches = append(pendingPatches, patch)
+					row, _ := gtk.ListBoxRowNew()
+					desc := patch.ShortDescription
+					if desc == "" {
+						desc = fmt.Sprintf("Patch with %d files", len(patch.Files))
+					}
+					lbl, _ := gtk.LabelNew(fmt.Sprintf("[%s] %s", time.Now().Format("15:04"), desc))
+					lbl.SetXAlign(0)
+					row.Add(lbl)
+					pendingPanel.List.Add(row)
+					pendingPanel.List.ShowAll()
+					updateStatus(statusLabel, "New patch detected in clipboard")
+				})
+			}
+		}
+	}
+}
+
 func renderDiff(p model.ProjectOutput, title string) {
 	statsBuf.SetText("")
 	statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("=== %s ===\n\n", strings.ToUpper(title)), getTag("header"))
@@ -316,13 +369,7 @@ func renderDiff(p model.ProjectOutput, title string) {
 	}
 	sort.Strings(keys)
 
-	renderCount := 0
-	const limit = 10
-
 	for _, path := range keys {
-		if renderCount >= limit {
-			break
-		}
 		newContent := p.Files[path]
 		if !utf8.ValidString(newContent) {
 			continue
@@ -332,108 +379,46 @@ func renderDiff(p model.ProjectOutput, title string) {
 
 		old, _ := os.ReadFile(path)
 		oldStr := string(old)
-		if !utf8.ValidString(oldStr) {
-			oldStr = ""
-		}
 
-		// Safe parsing via the patch package
 		hunks := patch.ParseHunks(newContent)
-
 		if len(hunks) > 0 {
 			for _, h := range hunks {
 				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "--- SURGICAL MODIFICATION ---\n", getTag("header"))
 				statsBuf.Insert(statsBuf.GetEndIter(), "[EXISTING CODE]:\n")
 				statsBuf.InsertWithTag(statsBuf.GetEndIter(), h.Search+"\n", getTag("deleted"))
-
 				statsBuf.Insert(statsBuf.GetEndIter(), "\n[REPLACEMENT]:\n")
 				statsBuf.InsertWithTag(statsBuf.GetEndIter(), h.Replace+"\n", getTag("added"))
 
 				_, ok := patch.ApplyHunk(oldStr, h)
 				if !ok {
-					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\nERROR: Match not found! Logic mismatch or indentation error.\n", getTag("header"))
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\nERROR: Match not found!\n", getTag("header"))
 				} else {
 					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\nREADY: Hunk match validated.\n", getTag("added"))
 				}
 				statsBuf.Insert(statsBuf.GetEndIter(), "\n---\n\n")
 			}
 		} else {
-			// standard diff for full file content
-			statsBuf.InsertWithTag(statsBuf.GetEndIter(), "--- FULL FILE OVERWRITE ---\n", getTag("header"))
-			diffs := dmp.DiffMain(oldStr, newContent, true)
-			for _, diff := range diffs {
-				switch diff.Type {
+			diffs := dmp.DiffMain(oldStr, newContent, false)
+			for _, d := range diffs {
+				tag := ""
+				switch d.Type {
 				case diffmatchpatch.DiffInsert:
-					statsBuf.InsertWithTag(statsBuf.GetEndIter(), diff.Text, getTag("added"))
+					tag = "added"
 				case diffmatchpatch.DiffDelete:
-					statsBuf.InsertWithTag(statsBuf.GetEndIter(), diff.Text, getTag("deleted"))
-				case diffmatchpatch.DiffEqual:
-					statsBuf.Insert(statsBuf.GetEndIter(), diff.Text)
+					tag = "deleted"
+				}
+				if tag != "" {
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), d.Text, getTag(tag))
+				} else {
+					statsBuf.Insert(statsBuf.GetEndIter(), d.Text)
 				}
 			}
 			statsBuf.Insert(statsBuf.GetEndIter(), "\n\n")
 		}
-		renderCount++
 	}
 }
 
-func processClipboard(text string) {
-	var input model.ProjectOutput
-
-	// 1. Try JSON extraction
-	reJSON := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
-	jsonMatch := reJSON.FindString(text)
-
-	if jsonMatch != "" && json.Unmarshal([]byte(jsonMatch), &input) == nil {
-		// Successfully parsed JSON
-	} else if strings.Contains(text, "<<<<<< SEARCH") && strings.Contains(text, "======") {
-		// 2. Fallback: Raw surgical block - try to find a file path header
-		path := "unknown_file.go"
-		rePath := regexp.MustCompile(`(?i)FILE:\s*([^\s\n]+)`)
-		pathMatch := rePath.FindStringSubmatch(text)
-		if len(pathMatch) > 1 {
-			path = pathMatch[1]
-		}
-
-		input = model.ProjectOutput{
-			ShortDescription: "Manual: " + filepath.Base(path),
-			Files: map[string]string{
-				path: text,
-			},
-		}
-	} else {
-		return
-	}
-
-	// Add to list with Trash Icon
-	pendingPatches = append(pendingPatches, input)
-	row, _ := gtk.ListBoxRowNew()
-	hbox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
-
-	lbl, _ := gtk.LabelNew(input.ShortDescription)
-	if input.ShortDescription == "" {
-		lbl.SetText(fmt.Sprintf("Patch %d", len(pendingPatches)))
-	}
-	lbl.SetXAlign(0)
-	hbox.PackStart(lbl, true, true, 5)
-
-	delBtn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_MENU)
-	delBtn.SetRelief(gtk.RELIEF_NONE)
-	delBtn.Connect("clicked", func() {
-		cIdx := row.GetIndex()
-		if cIdx >= 0 && cIdx < len(pendingPatches) {
-			pendingPatches = append(pendingPatches[:cIdx], pendingPatches[cIdx+1:]...)
-			pendingPanel.List.Remove(row)
-			resetView()
-			updateStatus(statusLabel, "Patch removed")
-		}
-	})
-
-	hbox.PackEnd(delBtn, false, false, 2)
-	row.Add(hbox)
-
-	pendingPanel.List.Add(row)
-	pendingPanel.List.ShowAll()
-	updateStatus(statusLabel, "New patch detected")
+func mustMarshal(v interface{}) []byte {
+	b, _ := json.MarshalIndent(v, "", "  ")
+	return b
 }
-
-func mustMarshal(v interface{}) []byte { b, _ := json.MarshalIndent(v, "", "  "); return b }
