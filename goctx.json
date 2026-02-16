@@ -3,6 +3,6 @@
   "extensions": [".go", ".mod", ".md", ".json"],
   "scripts": {
     "build": "go build -o goctx .",
-    "test": "go test ./..."
+    "test": "go test ."
   }
 }

@@ -118,6 +118,14 @@ func setupTags(buffer *gtk.TextBuffer) {
 	tagH.SetProperty("weight", 700)
 	tagH.SetProperty("foreground", "#569cd6")
 	tab.Add(tagH)
+
+	tagK, _ := gtk.TextTagNew("keyword")
+	tagK.SetProperty("foreground", "#c586c0")
+	tab.Add(tagK)
+
+	tagC, _ := gtk.TextTagNew("comment")
+	tagC.SetProperty("foreground", "#6a9955")
+	tab.Add(tagC)
 }
 
 func getTag(n string) *gtk.TextTag {

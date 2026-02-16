@@ -72,6 +72,14 @@ func Run() {
 	vSidebar.Pack1(pendingPanel.Container, true, false)
 	vSidebar.Pack2(historyPanel.Container, true, false)
 
+	// Context Tree
+	contextTreeBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
+	label(contextTreeBox, "CONTEXT SELECTION")
+	treeView, store := setupContextTree()
+	treeScroll, _ := gtk.ScrolledWindowNew(nil, nil)
+	treeScroll.Add(treeView)
+	contextTreeBox.PackStart(treeScroll, true, true, 0)
+
 	// Content Area
 	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	statsScroll, _ := gtk.ScrolledWindowNew(nil, nil)
@@ -85,7 +93,11 @@ func Run() {
 	statsScroll.Add(statsView)
 	rightStack.PackStart(statsScroll, true, true, 0)
 
-	hPaned.Pack1(vSidebar, false, false)
+	mainSidebar, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
+	mainSidebar.PackStart(vSidebar, true, true, 0)
+	mainSidebar.PackStart(contextTreeBox, true, true, 0)
+
+	hPaned.Pack1(mainSidebar, false, false)
 	hPaned.Pack2(rightStack, true, false)
 
 	// Status Bar
@@ -103,12 +115,13 @@ func Run() {
 	// --- Logic ---
 	btnBuild.Connect("clicked", func() {
 		go func() {
-			out, err := builder.BuildSelectiveContext(".", "Manual Build")
+			selected := getCheckedFiles(store)
+			out, err := builder.BuildSelectiveContext(".", "Manual Build", selected)
 			if err == nil {
 				activeContext = out
 				glib.IdleAdd(func() {
 					renderDiff(activeContext, "Current Workspace State")
-					updateStatus(statusLabel, "Context built")
+					updateStatus(statusLabel, "Context built (filtered)")
 				})
 			}
 		}()

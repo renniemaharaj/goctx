@@ -67,7 +67,25 @@ func isBinary(data []byte) bool {
 	return bytes.Contains(data, []byte{0})
 }
 
-func BuildSelectiveContext(root string, description string) (model.ProjectOutput, error) {
+func GetFileList(root string) ([]string, error) {
+	ignorePatterns := LoadIgnorePatterns(root)
+	var files []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() { return nil }
+		rel, _ := filepath.Rel(root, path)
+		for _, p := range ignorePatterns {
+			if strings.Contains(rel, p) { return nil }
+		}
+		files = append(files, rel)
+		return nil
+	})
+	return files, err
+}
+
+func BuildSelectiveContext(root string, description string, whitelist []string) (model.ProjectOutput, error) {
+	filter := make(map[string]bool)
+	for _, f := range whitelist { filter[f] = true }
+
 	absRoot, _ := filepath.Abs(root)
 	out := model.ProjectOutput{
 		InstructionHeader: AI_PROMPT_HEADER,
@@ -102,7 +120,12 @@ func BuildSelectiveContext(root string, description string) (model.ProjectOutput
 							break
 						}
 					}
+
 					if ignored {
+						continue
+					}
+
+					if !entry.IsDir() && len(whitelist) > 0 && !filter[relPath] {
 						continue
 					}
 

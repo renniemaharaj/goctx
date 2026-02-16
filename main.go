@@ -29,7 +29,7 @@ func main() {
 }
 
 func runBuild() {
-	output, _ := builder.BuildSelectiveContext(".", "Manual Build")
+	output, _ := builder.BuildSelectiveContext(".", "Manual Build", nil)
 	json.NewEncoder(os.Stdout).Encode(output)
 }
 
