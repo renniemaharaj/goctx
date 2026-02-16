@@ -11,6 +11,18 @@ import (
 	"goctx/internal/patch"
 )
 
+func ApplyHunksToString(original string, hunks []patch.Hunk) (string, error) {
+	result := original
+	for _, h := range hunks {
+		newStr, ok := patch.ApplyHunk(result, h)
+		if !ok {
+			return original, fmt.Errorf("hunk match failed")
+		}
+		result = newStr
+	}
+	return result, nil
+}
+
 func ApplyPatch(root string, input model.ProjectOutput) error {
 	if len(input.Files) == 0 {
 		return fmt.Errorf("no files to apply")
@@ -51,23 +63,18 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 
 	return nil
 }
-
 func applySurgicalEdit(path string, hunks []patch.Hunk) error {
 	originalData, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("could not read file: %w", err)
 	}
 
-	fileStr := string(originalData)
-	for _, h := range hunks {
-		newStr, ok := patch.ApplyHunk(fileStr, h)
-		if !ok {
-			return fmt.Errorf("match failed in %s", path)
-		}
-		fileStr = newStr
+	newStr, err := ApplyHunksToString(string(originalData), hunks)
+	if err != nil {
+		return err
 	}
 
-	return os.WriteFile(path, []byte(fileStr), 0644)
+	return os.WriteFile(path, []byte(newStr), 0644)
 }
 
 func safePath(root, path string) bool {
