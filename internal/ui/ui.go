@@ -30,94 +30,77 @@ var (
 func Run() {
 	gtk.Init(nil)
 	win, _ = gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
-	win.SetTitle("GoCtx Manager")
 	win.SetDefaultSize(1400, 950)
 	win.Connect("destroy", gtk.MainQuit)
 
-	vmain, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	hmain, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+	// --- HeaderBar (Toolbar with Close Button) ---
+	header, _ := gtk.HeaderBarNew()
+	header.SetShowCloseButton(true)
+	header.SetTitle("GoCtx Manager")
+	header.SetSubtitle("Stash-Apply-Commit Workflow")
+	win.SetTitlebar(header)
 
-	leftBar, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 15)
-	leftBar.SetMarginStart(15)
-	leftBar.SetMarginEnd(15)
-	leftBar.SetMarginTop(15)
-	leftBar.SetSizeRequest(320, -1)
-
-	btnsWrapper, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 15)
-	leftBar.PackStart(btnsWrapper, false, false, 0)
-
-	btnBuild := newBtn("")
-	btnCopy := newBtn("")
-	btnApplyPatch = newBtn("")
-	btnApplyCommit = newBtn("")
-	btnCommit = newBtn("")
-
-	btnBuild.SetTooltipText("Build current workspace context")
-	btnCopy.SetTooltipText("Copy AI system prompt + context to clipboard")
-	btnApplyPatch.SetTooltipText("Apply selected pending patch")
-	btnApplyCommit.SetTooltipText("Restore workspace to this commit's state")
-	btnCommit.SetTooltipText("Commit all changes to git")
-
-	imgBuild, _ := gtk.ImageNewFromIconName("document-open-symbolic", gtk.ICON_SIZE_BUTTON)
-	imgCopy, _ := gtk.ImageNewFromIconName("edit-copy-symbolic", gtk.ICON_SIZE_BUTTON)
-	imgPatch, _ := gtk.ImageNewFromIconName("document-save-symbolic", gtk.ICON_SIZE_BUTTON)
-	imgRevert, _ := gtk.ImageNewFromIconName("edit-undo-symbolic", gtk.ICON_SIZE_BUTTON)
-	imgCommit, _ := gtk.ImageNewFromIconName("emblem-ok-symbolic", gtk.ICON_SIZE_BUTTON)
-
-	btnBuild.SetImage(imgBuild)
-	btnCopy.SetImage(imgCopy)
-	btnApplyPatch.SetImage(imgPatch)
-	btnApplyCommit.SetImage(imgRevert)
-	btnCommit.SetImage(imgCommit)
-
-	btnBuild.SetAlwaysShowImage(true)
-	btnCopy.SetAlwaysShowImage(true)
-	btnApplyPatch.SetAlwaysShowImage(true)
-	btnApplyCommit.SetAlwaysShowImage(true)
-	btnCommit.SetAlwaysShowImage(true)
+	// Toolbar Buttons
+	btnBuild := createToolBtn("document-open-symbolic", "Build current workspace context")
+	btnCopy := createToolBtn("edit-copy-symbolic", "Copy AI system prompt + context to clipboard")
+	btnApplyPatch = createToolBtn("document-save-symbolic", "Apply selected pending patch")
+	btnApplyCommit = createToolBtn("edit-undo-symbolic", "Restore workspace to this commit's state")
+	btnCommit = createToolBtn("emblem-ok-symbolic", "Commit all changes to git")
 
 	btnApplyPatch.SetSensitive(false)
 	btnApplyCommit.SetSensitive(false)
+	btnCommit.SetSensitive(false)
 
-	btnsWrapper.PackStart(btnBuild, false, false, 0)
-	btnsWrapper.PackStart(btnCopy, false, false, 0)
-	btnsWrapper.PackStart(btnApplyPatch, false, false, 0)
-	btnsWrapper.PackStart(btnApplyCommit, false, false, 0)
-	btnsWrapper.PackEnd(btnCommit, false, false, 0)
+	header.PackStart(btnBuild)
+	header.PackStart(btnCopy)
+	header.PackStart(btnApplyPatch)
+	header.PackStart(btnApplyCommit)
+	header.PackEnd(btnCommit)
 
-	pendingPanel = NewActionPanel("PENDING PATCHES", 200, clearAllSelections)
-	leftBar.PackStart(pendingPanel.Container, false, false, 0)
+	// --- Layout: Resizable Panes ---
+	// Root Paned: [ Sidebar (Left) | Diff View (Right) ]
+	hPaned, _ := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
+	hPaned.SetPosition(350)
 
-	historyPanel = NewActionPanel("COMMIT HISTORY", 0, clearAllSelections)
-	leftBar.PackStart(historyPanel.Container, true, true, 0)
+	// Sidebar Paned: [ Pending Patches (Top) | History (Bottom) ]
+	vSidebar, _ := gtk.PanedNew(gtk.ORIENTATION_VERTICAL)
+	vSidebar.SetPosition(300)
 
-	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
-	rightStack.SetMarginStart(20)
-	rightStack.SetMarginEnd(20)
-	rightStack.SetMarginTop(15)
+	pendingPanel = NewActionPanel("PENDING PATCHES", clearAllSelections)
+	historyPanel = NewActionPanel("COMMIT HISTORY", clearAllSelections)
 
-	label(rightStack, "CONTEXT TOOL GUI (GOCTX)")
+	vSidebar.Pack1(pendingPanel.Container, true, false)
+	vSidebar.Pack2(historyPanel.Container, true, false)
+
+	// Content Area
+	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	statsScroll, _ := gtk.ScrolledWindowNew(nil, nil)
 	statsView, _ := gtk.TextViewNew()
 	statsView.SetMonospace(true)
 	statsView.SetEditable(false)
-	statsView.SetLeftMargin(25)
-	statsView.SetTopMargin(25)
+	statsView.SetLeftMargin(15)
+	statsView.SetTopMargin(15)
 	statsBuf, _ = statsView.GetBuffer()
+	setupTags(statsBuf)
 	statsScroll.Add(statsView)
 	rightStack.PackStart(statsScroll, true, true, 0)
 
-	setupTags(statsBuf)
+	hPaned.Pack1(vSidebar, false, false)
+	hPaned.Pack2(rightStack, true, false)
 
+	// Status Bar
 	statusPanel, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	statusLabel, _ = gtk.LabelNew("Ready")
-	statusPanel.PackStart(statusLabel, false, false, 10)
+	statusLabel.SetMarginStart(10)
+	statusLabel.SetMarginBottom(5)
+	statusPanel.PackStart(statusLabel, false, false, 0)
 
-	hmain.PackStart(leftBar, false, false, 0)
-	hmain.PackStart(rightStack, true, true, 0)
-	vmain.PackStart(hmain, true, true, 0)
-	vmain.PackStart(statusPanel, false, false, 5)
+	vmain, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	vmain.PackStart(hPaned, true, true, 0)
+	vmain.PackStart(statusPanel, false, false, 0)
+	win.Add(vmain)
 
+	// --- Logic ---
 	btnBuild.Connect("clicked", func() {
 		go func() {
 			out, err := builder.BuildSelectiveContext(".", "Manual Build")
@@ -152,21 +135,17 @@ func Run() {
 	historyPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row != nil {
 			pendingPanel.List.UnselectAll()
-
 			lblWidget, _ := row.GetChild()
 			lbl, _ := lblWidget.(*gtk.Label)
 			fullText, _ := lbl.GetText()
-
 			parts := strings.Fields(fullText)
 			if len(parts) > 0 {
 				hash := parts[0]
 				showCmd := exec.Command("git", "show", "--color=never", hash)
 				out, _ := showCmd.Output()
-
 				statsBuf.SetText("")
 				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "COMMIT PREVIEW: "+hash+"\n\n", getTag("header"))
 				statsBuf.Insert(statsBuf.GetEndIter(), string(out))
-
 				btnApplyCommit.SetSensitive(true)
 				btnApplyPatch.SetSensitive(false)
 			}
@@ -178,7 +157,6 @@ func Run() {
 		if row == nil {
 			return
 		}
-
 		lblWidget, _ := row.GetChild()
 		lbl, _ := lblWidget.(*gtk.Label)
 		fullText, _ := lbl.GetText()
@@ -186,12 +164,11 @@ func Run() {
 		if len(parts) > 0 {
 			hash := parts[0]
 			if confirmAction(win, "Restoring "+hash+" will overwrite current changes. Proceed?") {
-				// Restore the workspace to this commit's state without moving HEAD
 				cmd := exec.Command("git", "checkout", hash, "--", ".")
 				if err := cmd.Run(); err != nil {
-					updateStatus(statusLabel, "Error restoring files: "+err.Error())
+					updateStatus(statusLabel, "Error: "+err.Error())
 				} else {
-					updateStatus(statusLabel, "Workspace updated to match "+hash)
+					updateStatus(statusLabel, "Restored "+hash)
 					refreshHistory(historyPanel.List)
 				}
 			}
@@ -199,14 +176,12 @@ func Run() {
 	})
 
 	btnApplyPatch.Connect("clicked", func() {
-		// Check for dirty state to warn user about auto-stashing
 		stat, _ := exec.Command("git", "status", "--porcelain").Output()
-		message := "Apply selected patch?"
+		msg := "Apply selected patch?"
 		if len(strings.TrimSpace(string(stat))) > 0 {
-			message = "Workspace is DIRTY. Current changes will be STASHED before applying. Proceed?"
+			msg = "Workspace is DIRTY. Stashing current changes first. Proceed?"
 		}
-
-		if confirmAction(win, message) {
+		if confirmAction(win, msg) {
 			row := pendingPanel.List.GetSelectedRow()
 			if row != nil {
 				idx := row.GetIndex()
@@ -214,11 +189,9 @@ func Run() {
 				if err == nil {
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
 					pendingPanel.List.Remove(row)
-
-					updateStatus(statusLabel, "Patch applied; workspace dirty")
+					updateStatus(statusLabel, "Patch applied")
 					clearAllSelections()
 					refreshHistory(historyPanel.List)
-					btnCommit.SetSensitive(true)
 				} else {
 					updateStatus(statusLabel, "Error: "+err.Error())
 				}
@@ -227,25 +200,29 @@ func Run() {
 	})
 
 	btnCommit.Connect("clicked", func() {
-		if confirmAction(win, "Commit all changes?") {
+		if confirmAction(win, "Commit changes?") {
 			exec.Command("git", "add", ".").Run()
-			cmd := exec.Command("git", "commit", "-m", "GoCtx: applied surgical patch")
-			if err := cmd.Run(); err != nil {
-				updateStatus(statusLabel, "Commit failed: "+err.Error())
+			if err := exec.Command("git", "commit", "-m", "GoCtx: patch").Run(); err != nil {
+				updateStatus(statusLabel, "Failed: "+err.Error())
 			} else {
-				updateStatus(statusLabel, "Changes committed to git")
-				btnCommit.SetSensitive(false)
-				btnCommit.SetVisible(false)
+				updateStatus(statusLabel, "Committed")
 				refreshHistory(historyPanel.List)
 			}
 		}
 	})
 
-	// Background Monitoring Loop
 	backgroundMonitoringLoop()
 	refreshHistory(historyPanel.List)
 	lastHistoryCount = countCommits()
-	win.Add(vmain)
 	win.ShowAll()
 	gtk.Main()
+}
+
+func createToolBtn(iconName, tooltip string) *gtk.Button {
+	btn, _ := gtk.ButtonNew()
+	img, _ := gtk.ImageNewFromIconName(iconName, gtk.ICON_SIZE_BUTTON)
+	btn.SetImage(img)
+	btn.SetAlwaysShowImage(true)
+	btn.SetTooltipText(tooltip)
+	return btn
 }

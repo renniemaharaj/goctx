@@ -9,7 +9,7 @@ type ActionPanel struct {
 }
 
 // NewActionPanel creates a labeled, scrollable list box used for Stashes and Patches
-func NewActionPanel(title string, height int, onEmptyClick func()) *ActionPanel {
+func NewActionPanel(title string, onEmptyClick func()) *ActionPanel {
 	box, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
 
 	lbl, _ := gtk.LabelNew(title)
@@ -19,10 +19,6 @@ func NewActionPanel(title string, height int, onEmptyClick func()) *ActionPanel 
 	list, _ := gtk.ListBoxNew()
 	eb, _ := gtk.EventBoxNew()
 	sw, _ := gtk.ScrolledWindowNew(nil, nil)
-
-	if height > 0 {
-		sw.SetSizeRequest(-1, height)
-	}
 
 	sw.Add(list)
 	eb.Add(sw)

@@ -23,6 +23,8 @@ func backgroundMonitoringLoop() {
 				stat, _ := exec.Command("git", "status", "--porcelain").Output()
 				hasChanges := len(strings.TrimSpace(string(stat))) > 0
 				btnCommit.SetVisible(hasChanges)
+				btnCommit.SetSensitive(hasChanges)
+
 				if !hasChanges {
 					btnCommit.SetSensitive(false)
 				}

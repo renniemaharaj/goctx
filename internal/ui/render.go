@@ -31,32 +31,34 @@ func renderDiff(p model.ProjectOutput, title string) {
 	sort.Strings(keys)
 
 	for _, path := range keys {
-		newContent := p.Files[path]
-		if !utf8.ValidString(newContent) {
+		content := p.Files[path]
+		if !utf8.ValidString(content) {
 			continue
 		}
 
 		statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("FILE: %s\n", path), getTag("header"))
 
-		old, err := os.ReadFile(path)
+		oldData, err := os.ReadFile(path)
 		var oldStr string
-		if err != nil && os.IsNotExist(err) {
-			statsBuf.InsertWithTag(statsBuf.GetEndIter(), "(NEW FILE)\n", getTag("header"))
+		if err != nil {
+			if os.IsNotExist(err) {
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "(NEW FILE)\n", getTag("header"))
+			}
 		} else {
-			oldStr = string(old)
+			oldStr = string(oldData)
 		}
 
-		hunks := patch.ParseHunks(newContent)
+		hunks := patch.ParseHunks(content)
 		if len(hunks) > 0 {
 			for _, h := range hunks {
 				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "--- SURGICAL MODIFICATION ---\n", getTag("header"))
 
-				// Diff the Search vs Replace blocks to show granular changes
-				blockDiffs := dmp.DiffMain(h.Search, h.Replace, false)
-				blockDiffs = dmp.DiffCleanupSemantic(blockDiffs)
+				// Show granular changes inside the block
+				diffs := dmp.DiffMain(h.Search, h.Replace, false)
+				diffs = dmp.DiffCleanupSemantic(diffs)
 
 				statsBuf.Insert(statsBuf.GetEndIter(), "[CHANGES]:\n")
-				for _, d := range blockDiffs {
+				for _, d := range diffs {
 					tag := ""
 					switch d.Type {
 					case diffmatchpatch.DiffInsert:
@@ -70,18 +72,19 @@ func renderDiff(p model.ProjectOutput, title string) {
 						statsBuf.Insert(statsBuf.GetEndIter(), d.Text)
 					}
 				}
-				statsBuf.Insert(statsBuf.GetEndIter(), "\n")
 
-				_, ok := patch.ApplyHunk(oldStr, h)
-				if !ok {
-					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\nERROR: Match not found!\n", getTag("header"))
-				} else {
-					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\nREADY: Hunk match validated.\n", getTag("added"))
+				// Check if the block actually matches what's on disk
+				if oldStr != "" && !strings.Contains(oldStr, h.Search) {
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\n\nERROR: SEARCH block not found in target file!\n", getTag("deleted"))
+				} else if oldStr != "" {
+					statsBuf.InsertWithTag(statsBuf.GetEndIter(), "\n\nREADY: Hunk match validated.\n", getTag("added"))
 				}
 				statsBuf.Insert(statsBuf.GetEndIter(), "\n---\n\n")
 			}
 		} else {
-			diffs := dmp.DiffMain(oldStr, newContent, false)
+			// standard diff for full files
+			diffs := dmp.DiffMain(oldStr, content, false)
+			diffs = dmp.DiffCleanupSemantic(diffs)
 			for _, d := range diffs {
 				tag := ""
 				switch d.Type {
