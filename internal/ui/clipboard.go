@@ -100,5 +100,10 @@ func addPatchToSidebar(input model.ProjectOutput) {
 	hbox.PackEnd(delBtn, false, false, 2)
 	row.Add(hbox)
 	pendingPanel.List.Add(row)
+
+	// Add tooltip showing number of files in the patch
+	tooltipText := fmt.Sprintf("Contains %d file(s)", len(input.Files))
+	row.SetTooltipText(tooltipText)
+
 	pendingPanel.List.ShowAll()
 }
