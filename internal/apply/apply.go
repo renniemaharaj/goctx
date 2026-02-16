@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"goctx/internal/config"
 	"goctx/internal/model"
 	"goctx/internal/patch"
+	"goctx/internal/runner"
+	"goctx/internal/stash"
 )
 
 func ApplyHunksToString(original string, hunks []patch.Hunk) (string, error) {
@@ -58,6 +61,23 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 			// High-integrity rollback: restore from the stash created at the start of this operation
 			_ = exec.Command("git", "stash", "pop", "--index").Run()
 			return fmt.Errorf("critical failure at %s; workspace rolled back: %w", path, applyErr)
+		}
+	}
+
+	// Verification Phase: Run Build & Test scripts if configured
+	cfg, _ := config.Load(root)
+
+	if cfg.Scripts.Build != "" {
+		if out, err := runner.Run(root, cfg.Scripts.Build); err != nil {
+			stash.Push(root, fmt.Sprintf("Auto-stash: Build Failed - %s", input.ShortDescription))
+			return fmt.Errorf("BUILD_FAILURE: Verification failed for '%s'\n\nOutput:\n%s", cfg.Scripts.Build, string(out))
+		}
+	}
+
+	if cfg.Scripts.Test != "" {
+		if out, err := runner.Run(root, cfg.Scripts.Test); err != nil {
+			stash.Push(root, fmt.Sprintf("Auto-stash: Tests Failed - %s", input.ShortDescription))
+			return fmt.Errorf("TEST_FAILURE: Verification failed for '%s'\n\nOutput:\n%s", cfg.Scripts.Test, string(out))
 		}
 	}
 

@@ -193,7 +193,8 @@ func Run() {
 					clearAllSelections()
 					refreshHistory(historyPanel.List)
 				} else {
-					updateStatus(statusLabel, "Error: "+err.Error())
+					updateStatus(statusLabel, "Patch rejected: Check verification logs")
+					showDetailedError("Patch Verification Failed", err.Error())
 				}
 			}
 		}
@@ -216,6 +217,13 @@ func Run() {
 	lastHistoryCount = countCommits()
 	win.ShowAll()
 	gtk.Main()
+}
+
+func showDetailedError(title, msg string) {
+	dialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, title)
+	dialog.FormatSecondaryText(msg)
+	dialog.Run()
+	dialog.Destroy()
 }
 
 func createToolBtn(iconName, tooltip string) *gtk.Button {

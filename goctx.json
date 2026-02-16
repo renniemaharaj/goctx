@@ -1,0 +1,8 @@
+{
+  "ignore": [".git", ".stashes", "goctx", "goctx.png", ".ctxignore"],
+  "extensions": [".go", ".mod", ".md", ".json"],
+  "scripts": {
+    "build": "go build -o goctx .",
+    "test": "go test ./..."
+  }
+}

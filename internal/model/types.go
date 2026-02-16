@@ -1,8 +1,14 @@
 package model
 
+type Scripts struct {
+	Test  string `json:"test,omitempty"`
+	Build string `json:"build,omitempty"`
+}
+
 type Config struct {
-	Ignore     []string `json:"ignore"` 
-	Extensions []string `json:"extensions"` 
+	Ignore     []string `json:"ignore"`
+	Extensions []string `json:"extensions"`
+	Scripts    Scripts  `json:"scripts"`
 }
 
 type ProjectOutput struct {

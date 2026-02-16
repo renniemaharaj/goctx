@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+// Push creates a stash with a message
+func Push(root, message string) error {
+	cmd := exec.Command("git", "stash", "push", "-m", message)
+	cmd.Dir = root
+	return cmd.Run()
+}
+
 // GetCommits returns the recent git commit history
 func GetCommits(root string) ([]string, error) {
 	cmd := exec.Command("git", "log", "--oneline", "-n", "30")
