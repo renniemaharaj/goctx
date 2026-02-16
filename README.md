@@ -12,27 +12,29 @@ GoCtx is a local orchestrator designed to bridge development environments with A
 - **Patch Management**: Queues detected patches in the sidebar with a **Surgical Delete (Trash Icon)** to prune the queue without affecting the workspace.
 - **Granular Visual Diffs**: Provides a color-coded, semantic diff of changes *within* the surgical block, allowing instant verification of variable renames or logic tweaks.
 
-## CLI Interface
+## Installation
 
-GoCtx supports standard streams for seamless integration between tools:
+```bash
+git clone https://github.com/renniemaharaj/goctx
+cd goctx
+go build .
+sudo mv goctx /bin/goctx
+```
 
-- **Piping Context**: Send project context directly to other applications (e.g., VS Code):
-  ```bash
-  go run main.go | code -
-  ```
-- **Piping for Application**: Pipe a JSON context or patch directly into the apply command:
-  ```bash
-  cat patch.json | go run main.go apply
-  ```
+## Usage Workflow
 
-## Usage Protocol
+1. **Launch**: Run `goctx gui` in any directory to open the dashboard.
+2. **Contextualize AI**:
+   - Click **Build** to generate the context.
+   - Click **Copy** and paste it into an AI model's system prompt (e.g., Google AI Studio) or chat window.
+   - *Note: Patch quality depends on the AI model's reasoning capabilities.*
+3. **Ingest Patches**: When the AI provides a solution, simply **copy the code/JSON to your clipboard**. GoCtx automatically detects it for review.
+4. **Review & Apply**: Validate the changes using the granular diff view, then click **Apply** to integrate (triggers auto-stash for dirty workspaces).
 
-1. **Run Dashboard**: `go run main.go gui`
-2. **Build Context**: Generate project state via the UI and copy to the AI agent.
-3. **Sanitize Queue**: Review pending patches in the dashboard. Use the delete button to discard non-viable suggestions.
-4. **Apply & Finalize**: Apply verified patches (triggering an auto-stash) and use the **Commit** button to clear the dirty state.
+## CLI Reference
 
-Turn your clipboard into data pipelines
+- **Stream Context**: Run `goctx` without arguments to output the project state to stdout (useful for piping).
+- **Apply Pipe**: Pipe JSON directly into the tool: `cat patch.json | goctx apply`
 
 ## Requirements
 
