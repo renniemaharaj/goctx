@@ -194,7 +194,8 @@ func Run() {
 					refreshHistory(historyPanel.List)
 				} else {
 					updateStatus(statusLabel, "Patch rejected: Check verification logs")
-					showDetailedError("Patch Verification Failed", err.Error())
+					RenderError(err)
+					showDetailedError("Patch Verification Failed", "Verification scripts failed. Check the main panel for output.")
 				}
 			}
 		}

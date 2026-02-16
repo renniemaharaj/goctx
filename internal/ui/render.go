@@ -128,3 +128,15 @@ func getTag(n string) *gtk.TextTag {
 	tag, _ := tab.Lookup(n)
 	return tag
 }
+
+// RenderError displays application or verification failures in the main panel
+func RenderError(err error) {
+	statsBuf.SetText("")
+	statsBuf.InsertWithTag(statsBuf.GetEndIter(), "=== APPLICATION / VERIFICATION FAILURE ===\n\n", getTag("deleted"))
+	
+	msg := err.Error()
+	// If the error contains build/test output with newlines, it will be preserved here
+	statsBuf.Insert(statsBuf.GetEndIter(), msg+"\n")
+
+	updateStatus(statusLabel, "Error details rendered to panel")
+}
