@@ -27,10 +27,10 @@ func backgroundMonitoringLoop() {
 					btnCommit.SetSensitive(false)
 				}
 
-				currentCount := countStashes()
-				if currentCount != lastStashCount {
-					refreshStashes(stashPanel.List)
-					lastStashCount = currentCount
+				currentCount := countCommits()
+				if currentCount != lastHistoryCount {
+					refreshHistory(historyPanel.List)
+					lastHistoryCount = currentCount
 				}
 
 				clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)

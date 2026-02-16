@@ -15,13 +15,13 @@ func mustMarshal(v interface{}) []byte {
 
 func clearAllSelections() {
 	pendingPanel.List.UnselectAll()
-	stashPanel.List.UnselectAll()
+	historyPanel.List.UnselectAll()
 	resetView()
 }
 
 func resetView() {
 	btnApplyPatch.SetSensitive(false)
-	btnApplyStash.SetSensitive(false)
+	btnApplyCommit.SetSensitive(false)
 	statsBuf.SetText("")
 	updateStatus(statusLabel, "Selection cleared")
 }

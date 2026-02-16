@@ -5,7 +5,6 @@ import (
 	"goctx/internal/builder"
 	"goctx/internal/model"
 	"os/exec"
-	"regexp"
 	"strings"
 
 	"github.com/gotk3/gotk3/gdk"
@@ -14,19 +13,18 @@ import (
 )
 
 var (
-	activeContext  model.ProjectOutput
-	lastClipboard  string
-	statsBuf       *gtk.TextBuffer
-	stashPanel     *ActionPanel
-	pendingPanel   *ActionPanel
-	pendingPatches []model.ProjectOutput
-	selectedStash  model.ProjectOutput
-	win            *gtk.Window
-	statusLabel    *gtk.Label
-	btnApplyPatch  *gtk.Button
-	btnApplyStash  *gtk.Button
-	btnCommit      *gtk.Button
-	lastStashCount int
+	activeContext    model.ProjectOutput
+	lastClipboard    string
+	statsBuf         *gtk.TextBuffer
+	historyPanel     *ActionPanel
+	pendingPanel     *ActionPanel
+	pendingPatches   []model.ProjectOutput
+	win              *gtk.Window
+	statusLabel      *gtk.Label
+	btnApplyPatch    *gtk.Button
+	btnApplyCommit   *gtk.Button
+	btnCommit        *gtk.Button
+	lastHistoryCount int
 )
 
 func Run() {
@@ -51,47 +49,47 @@ func Run() {
 	btnBuild := newBtn("")
 	btnCopy := newBtn("")
 	btnApplyPatch = newBtn("")
-	btnApplyStash = newBtn("")
+	btnApplyCommit = newBtn("")
 	btnCommit = newBtn("")
 
 	btnBuild.SetTooltipText("Build current workspace context")
 	btnCopy.SetTooltipText("Copy AI system prompt + context to clipboard")
 	btnApplyPatch.SetTooltipText("Apply selected pending patch")
-	btnApplyStash.SetTooltipText("Apply selected git stash")
+	btnApplyCommit.SetTooltipText("Restore workspace to this commit's state")
 	btnCommit.SetTooltipText("Commit all changes to git")
 
 	imgBuild, _ := gtk.ImageNewFromIconName("document-open-symbolic", gtk.ICON_SIZE_BUTTON)
 	imgCopy, _ := gtk.ImageNewFromIconName("edit-copy-symbolic", gtk.ICON_SIZE_BUTTON)
 	imgPatch, _ := gtk.ImageNewFromIconName("document-save-symbolic", gtk.ICON_SIZE_BUTTON)
-	imgStash, _ := gtk.ImageNewFromIconName("view-refresh-symbolic", gtk.ICON_SIZE_BUTTON)
+	imgRevert, _ := gtk.ImageNewFromIconName("edit-undo-symbolic", gtk.ICON_SIZE_BUTTON)
 	imgCommit, _ := gtk.ImageNewFromIconName("emblem-ok-symbolic", gtk.ICON_SIZE_BUTTON)
 
 	btnBuild.SetImage(imgBuild)
 	btnCopy.SetImage(imgCopy)
 	btnApplyPatch.SetImage(imgPatch)
-	btnApplyStash.SetImage(imgStash)
+	btnApplyCommit.SetImage(imgRevert)
 	btnCommit.SetImage(imgCommit)
 
 	btnBuild.SetAlwaysShowImage(true)
 	btnCopy.SetAlwaysShowImage(true)
 	btnApplyPatch.SetAlwaysShowImage(true)
-	btnApplyStash.SetAlwaysShowImage(true)
+	btnApplyCommit.SetAlwaysShowImage(true)
 	btnCommit.SetAlwaysShowImage(true)
 
 	btnApplyPatch.SetSensitive(false)
-	btnApplyStash.SetSensitive(false)
+	btnApplyCommit.SetSensitive(false)
 
 	btnsWrapper.PackStart(btnBuild, false, false, 0)
 	btnsWrapper.PackStart(btnCopy, false, false, 0)
 	btnsWrapper.PackStart(btnApplyPatch, false, false, 0)
-	btnsWrapper.PackStart(btnApplyStash, false, false, 0)
+	btnsWrapper.PackStart(btnApplyCommit, false, false, 0)
 	btnsWrapper.PackEnd(btnCommit, false, false, 0)
 
 	pendingPanel = NewActionPanel("PENDING PATCHES", 200, clearAllSelections)
 	leftBar.PackStart(pendingPanel.Container, false, false, 0)
 
-	stashPanel = NewActionPanel("STASHES", 0, clearAllSelections)
-	leftBar.PackStart(stashPanel.Container, true, true, 0)
+	historyPanel = NewActionPanel("COMMIT HISTORY", 0, clearAllSelections)
+	leftBar.PackStart(historyPanel.Container, true, true, 0)
 
 	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
 	rightStack.SetMarginStart(20)
@@ -144,14 +142,14 @@ func Run() {
 		if row == nil {
 			return
 		}
-		stashPanel.List.UnselectAll()
+		historyPanel.List.UnselectAll()
 		idx := row.GetIndex()
 		renderDiff(pendingPatches[idx], "Pending Patch Preview")
 		btnApplyPatch.SetSensitive(true)
-		btnApplyStash.SetSensitive(false)
+		btnApplyCommit.SetSensitive(false)
 	})
 
-	stashPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
+	historyPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row != nil {
 			pendingPanel.List.UnselectAll()
 
@@ -159,25 +157,24 @@ func Run() {
 			lbl, _ := lblWidget.(*gtk.Label)
 			fullText, _ := lbl.GetText()
 
-			re := regexp.MustCompile(`stash@\{\d+\}`)
-			stashRef := re.FindString(fullText)
-
-			if stashRef != "" {
-				showCmd := exec.Command("git", "stash", "show", "-p", stashRef)
+			parts := strings.Fields(fullText)
+			if len(parts) > 0 {
+				hash := parts[0]
+				showCmd := exec.Command("git", "show", "--color=never", hash)
 				out, _ := showCmd.Output()
 
 				statsBuf.SetText("")
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "GIT STASH PREVIEW: "+stashRef+"\n\n", getTag("header"))
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "COMMIT PREVIEW: "+hash+"\n\n", getTag("header"))
 				statsBuf.Insert(statsBuf.GetEndIter(), string(out))
 
-				btnApplyStash.SetSensitive(true)
+				btnApplyCommit.SetSensitive(true)
 				btnApplyPatch.SetSensitive(false)
 			}
 		}
 	})
 
-	btnApplyStash.Connect("clicked", func() {
-		row := stashPanel.List.GetSelectedRow()
+	btnApplyCommit.Connect("clicked", func() {
+		row := historyPanel.List.GetSelectedRow()
 		if row == nil {
 			return
 		}
@@ -185,16 +182,18 @@ func Run() {
 		lblWidget, _ := row.GetChild()
 		lbl, _ := lblWidget.(*gtk.Label)
 		fullText, _ := lbl.GetText()
-		re := regexp.MustCompile(`stash@\{\d+\}`)
-		stashRef := re.FindString(fullText)
-
-		if stashRef != "" && confirmAction(win, "Apply "+stashRef+"?") {
-			cmd := exec.Command("git", "stash", "apply", stashRef)
-			if err := cmd.Run(); err != nil {
-				updateStatus(statusLabel, "Conflict or error applying git stash")
-			} else {
-				updateStatus(statusLabel, "Stash applied successfully")
-				refreshStashes(stashPanel.List)
+		parts := strings.Fields(fullText)
+		if len(parts) > 0 {
+			hash := parts[0]
+			if confirmAction(win, "Restoring "+hash+" will overwrite current changes. Proceed?") {
+				// Restore the workspace to this commit's state without moving HEAD
+				cmd := exec.Command("git", "checkout", hash, "--", ".")
+				if err := cmd.Run(); err != nil {
+					updateStatus(statusLabel, "Error restoring files: "+err.Error())
+				} else {
+					updateStatus(statusLabel, "Workspace updated to match "+hash)
+					refreshHistory(historyPanel.List)
+				}
 			}
 		}
 	})
@@ -216,9 +215,9 @@ func Run() {
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
 					pendingPanel.List.Remove(row)
 
-					updateStatus(statusLabel, "Patch applied; previous state stashed")
+					updateStatus(statusLabel, "Patch applied; workspace dirty")
 					clearAllSelections()
-					refreshStashes(stashPanel.List)
+					refreshHistory(historyPanel.List)
 					btnCommit.SetSensitive(true)
 				} else {
 					updateStatus(statusLabel, "Error: "+err.Error())
@@ -237,14 +236,15 @@ func Run() {
 				updateStatus(statusLabel, "Changes committed to git")
 				btnCommit.SetSensitive(false)
 				btnCommit.SetVisible(false)
+				refreshHistory(historyPanel.List)
 			}
 		}
 	})
 
 	// Background Monitoring Loop
 	backgroundMonitoringLoop()
-	refreshStashes(stashPanel.List)
-	lastStashCount = countStashes()
+	refreshHistory(historyPanel.List)
+	lastHistoryCount = countCommits()
 	win.Add(vmain)
 	win.ShowAll()
 	gtk.Main()

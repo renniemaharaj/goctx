@@ -38,17 +38,39 @@ func renderDiff(p model.ProjectOutput, title string) {
 
 		statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("FILE: %s\n", path), getTag("header"))
 
-		old, _ := os.ReadFile(path)
-		oldStr := string(old)
+		old, err := os.ReadFile(path)
+		var oldStr string
+		if err != nil && os.IsNotExist(err) {
+			statsBuf.InsertWithTag(statsBuf.GetEndIter(), "(NEW FILE)\n", getTag("header"))
+		} else {
+			oldStr = string(old)
+		}
 
 		hunks := patch.ParseHunks(newContent)
 		if len(hunks) > 0 {
 			for _, h := range hunks {
 				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "--- SURGICAL MODIFICATION ---\n", getTag("header"))
-				statsBuf.Insert(statsBuf.GetEndIter(), "[EXISTING CODE]:\n")
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), h.Search+"\n", getTag("deleted"))
-				statsBuf.Insert(statsBuf.GetEndIter(), "\n[REPLACEMENT]:\n")
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), h.Replace+"\n", getTag("added"))
+
+				// Diff the Search vs Replace blocks to show granular changes
+				blockDiffs := dmp.DiffMain(h.Search, h.Replace, false)
+				blockDiffs = dmp.DiffCleanupSemantic(blockDiffs)
+
+				statsBuf.Insert(statsBuf.GetEndIter(), "[CHANGES]:\n")
+				for _, d := range blockDiffs {
+					tag := ""
+					switch d.Type {
+					case diffmatchpatch.DiffInsert:
+						tag = "added"
+					case diffmatchpatch.DiffDelete:
+						tag = "deleted"
+					}
+					if tag != "" {
+						statsBuf.InsertWithTag(statsBuf.GetEndIter(), d.Text, getTag(tag))
+					} else {
+						statsBuf.Insert(statsBuf.GetEndIter(), d.Text)
+					}
+				}
+				statsBuf.Insert(statsBuf.GetEndIter(), "\n")
 
 				_, ok := patch.ApplyHunk(oldStr, h)
 				if !ok {
