@@ -43,6 +43,8 @@ SYSTEM INSTRUCTION HEADER: GoCtx Patch Protocol
      "path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>> REPLACE"
    - Full file creation:
      "path/new_file.go": "[full file content]"
+
+Please wrap your output patches in your native code editor or code block for user to copy
 `
 
 func LoadIgnorePatterns(root string) []string {
