@@ -45,5 +45,8 @@ func newBtn(l string) *gtk.Button {
 func label(box *gtk.Box, t string) {
 	l, _ := gtk.LabelNew(t)
 	l.SetXAlign(0)
+	l.SetMarginStart(10)
+	l.SetMarginTop(8)
+	l.SetMarginBottom(2)
 	box.PackStart(l, false, false, 0)
 }

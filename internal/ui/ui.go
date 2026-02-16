@@ -62,15 +62,17 @@ func Run() {
 	hPaned, _ := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
 	hPaned.SetPosition(350)
 
-	// Sidebar Paned: [ Pending Patches (Top) | History (Bottom) ]
-	vSidebar, _ := gtk.PanedNew(gtk.ORIENTATION_VERTICAL)
-	vSidebar.SetPosition(300)
-
+	// Nested Resizable Sidebar: [ Pending | [ History | Explorer ] ]
 	pendingPanel = NewActionPanel("PENDING PATCHES", clearAllSelections)
 	historyPanel = NewActionPanel("COMMIT HISTORY", clearAllSelections)
 
-	vSidebar.Pack1(pendingPanel.Container, true, false)
-	vSidebar.Pack2(historyPanel.Container, true, false)
+	vSidebarOuter, _ := gtk.PanedNew(gtk.ORIENTATION_VERTICAL)
+	vSidebarInner, _ := gtk.PanedNew(gtk.ORIENTATION_VERTICAL)
+
+	vSidebarOuter.Pack1(pendingPanel.Container, true, false)
+	vSidebarOuter.Pack2(vSidebarInner, true, false)
+
+	vSidebarInner.Pack1(historyPanel.Container, true, false)
 
 	// Context Tree
 	contextTreeBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
@@ -79,6 +81,11 @@ func Run() {
 	treeScroll, _ := gtk.ScrolledWindowNew(nil, nil)
 	treeScroll.Add(treeView)
 	contextTreeBox.PackStart(treeScroll, true, true, 0)
+
+	vSidebarInner.Pack2(contextTreeBox, true, false)
+
+	vSidebarOuter.SetPosition(250)
+	vSidebarInner.SetPosition(250)
 
 	// Content Area
 	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
@@ -93,11 +100,7 @@ func Run() {
 	statsScroll.Add(statsView)
 	rightStack.PackStart(statsScroll, true, true, 0)
 
-	mainSidebar, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
-	mainSidebar.PackStart(vSidebar, true, true, 0)
-	mainSidebar.PackStart(contextTreeBox, true, true, 0)
-
-	hPaned.Pack1(mainSidebar, false, false)
+	hPaned.Pack1(vSidebarOuter, false, false)
 	hPaned.Pack2(rightStack, true, false)
 
 	// Status Bar
@@ -211,6 +214,18 @@ func Run() {
 					showDetailedError("Patch Verification Failed", "Verification scripts failed. Check the main panel for output.")
 				}
 			}
+		}
+	})
+
+	treeView.Connect("cursor-changed", func() {
+		selection, _ := treeView.GetSelection()
+		_, iter, ok := selection.GetSelected()
+		if ok {
+			pendingPanel.List.UnselectAll()
+			historyPanel.List.UnselectAll()
+			pathVal, _ := store.GetValue(iter, 2)
+			pathStr, _ := pathVal.GoValue()
+			RenderFile(pathStr.(string))
 		}
 	})
 

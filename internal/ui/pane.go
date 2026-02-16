@@ -14,6 +14,9 @@ func NewActionPanel(title string, onEmptyClick func()) *ActionPanel {
 
 	lbl, _ := gtk.LabelNew(title)
 	lbl.SetXAlign(0)
+	lbl.SetMarginStart(10)
+	lbl.SetMarginTop(8)
+	lbl.SetMarginBottom(2)
 	box.PackStart(lbl, false, false, 0)
 
 	list, _ := gtk.ListBoxNew()

@@ -5,6 +5,7 @@ import (
 	"goctx/internal/model"
 	"goctx/internal/patch"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -101,6 +102,38 @@ func renderDiff(p model.ProjectOutput, title string) {
 			}
 			statsBuf.Insert(statsBuf.GetEndIter(), "\n\n")
 		}
+	}
+}
+
+func RenderFile(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		RenderError(err)
+		return
+	}
+
+	statsBuf.SetText("")
+	content := string(data)
+	statsBuf.SetText(content)
+
+	// Simple regex-based syntax highlighting for Go/JSON
+	highlight(statsBuf, `\b(func|package|import|type|struct|interface|return|if|else|for|range|go|chan|select|case|default|var|const|map|switch)\b`, "keyword")
+	highlight(statsBuf, `//.*`, "comment")
+	highlight(statsBuf, `/\*[^*]*\*+([^/*][^*]*\*+)*/`, "comment")
+	highlight(statsBuf, `".*?"`, "added") // reuse 'added' green for strings
+
+	updateStatus(statusLabel, "Viewing: "+path)
+}
+
+func highlight(buffer *gtk.TextBuffer, pattern string, tag string) {
+	re := regexp.MustCompile(pattern)
+	text, _ := buffer.GetText(buffer.GetStartIter(), buffer.GetEndIter(), false)
+	matches := re.FindAllStringIndex(text, -1)
+
+	for _, m := range matches {
+		start := buffer.GetIterAtOffset(m[0])
+		end := buffer.GetIterAtOffset(m[1])
+		buffer.ApplyTagByName(tag, start, end)
 	}
 }
 
