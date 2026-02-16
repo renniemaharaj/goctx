@@ -4,7 +4,7 @@
 To improve efficiency and reliability, use **Surgical SEARCH/REPLACE blocks** for updates to existing files. 
 
 ### Rules for Surgical Edits:
-1. **Uniqueness**: Provide enough context lines in the `SEARCH` block to ensure a unique match within the file.
+1. **Uniqueness vs. Brevity**: Provide enough context lines (3-5) to ensure a unique match, but avoid excessive vertical context. This optimizes the granular diff view for the human reviewer.
 2. **Exact Match**: The content in the `SEARCH` block must be an exact character-for-character match (including indentation) of the target file.
 3. **Formatting**: Always wrap the markers in the JSON value. Use `\n` for newlines.
 

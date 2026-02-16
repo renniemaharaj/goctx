@@ -10,7 +10,7 @@ GoCtx is a local orchestrator designed to bridge development environments with A
   1. **Standard JSON**: Full `ProjectOutput` schema with metadata.
   2. **Raw Surgical Fallback**: Detects `SEARCH/REPLACE` blocks directly. Requires a `FILE: path/to/file` header for target identification.
 - **Patch Management**: Queues detected patches in the sidebar with a **Surgical Delete (Trash Icon)** to prune the queue without affecting the workspace.
-- **Visual Diffs**: Provides a color-coded preview of changes and validates surgical matches before integration.
+- **Granular Visual Diffs**: Provides a color-coded, semantic diff of changes *within* the surgical block, allowing instant verification of variable renames or logic tweaks.
 
 ## CLI Interface
 
