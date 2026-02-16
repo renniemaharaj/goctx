@@ -47,7 +47,7 @@ func refreshTreeData(store *gtk.TreeStore) {
 }
 
 func getCheckedFiles(store *gtk.TreeStore) []string {
-	var checked []string
+	checked := []string{}
 	store.ForEach(func(model *gtk.TreeModel, path *gtk.TreePath, iter *gtk.TreeIter) bool {
 		val, _ := model.GetValue(iter, 0)
 		active, _ := val.GoValue()

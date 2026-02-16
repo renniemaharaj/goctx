@@ -125,7 +125,7 @@ func BuildSelectiveContext(root string, description string, whitelist []string) 
 						continue
 					}
 
-					if !entry.IsDir() && len(whitelist) > 0 && !filter[relPath] {
+					if !entry.IsDir() && whitelist != nil && !filter[relPath] {
 						continue
 					}
 
