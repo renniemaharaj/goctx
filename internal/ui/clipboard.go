@@ -52,6 +52,12 @@ func dispatchPatches(outputs []model.ProjectOutput) {
 			addPatchToSidebar(p)
 		}
 		updateStatus(statusLabel, fmt.Sprintf("Detected %d new patches", len(outputs)))
+
+		// Show alert dialog
+		dlg := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Patch Detected")
+		dlg.FormatSecondaryText("Successfully ingested %d patch(es) from clipboard.", len(outputs))
+		dlg.Run()
+		dlg.Destroy()
 	})
 }
 

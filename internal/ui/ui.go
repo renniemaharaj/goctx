@@ -201,7 +201,7 @@ func Run() {
 			return
 		}
 		historyPanel.List.UnselectAll()
-		
+
 		pathMu.Lock()
 		currentEditingPath = ""
 		pathMu.Unlock()
@@ -216,7 +216,7 @@ func Run() {
 	historyPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row != nil {
 			pendingPanel.List.UnselectAll()
-			
+
 			pathMu.Lock()
 			currentEditingPath = ""
 			pathMu.Unlock()
@@ -230,7 +230,7 @@ func Run() {
 				hash := parts[0]
 				showCmd := exec.Command("git", "show", "--color=never", hash)
 				out, _ := showCmd.Output()
-			
+
 				isLoading = true
 				statsBuf.SetText("")
 				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "COMMIT PREVIEW: "+hash+"\n\n", getTag("header"))
@@ -267,45 +267,65 @@ func Run() {
 	})
 
 	btnApplyPatch.Connect("clicked", func() {
-		stat, _ := exec.Command("git", "status", "--porcelain").Output()
-		msg := "Apply selected patch?"
-		if len(strings.TrimSpace(string(stat))) > 0 {
-			msg = "Workspace is DIRTY. Stashing current changes first. Proceed?"
+		row := pendingPanel.List.GetSelectedRow()
+		if row == nil {
+			return
 		}
-		if confirmAction(win, msg) {
-			row := pendingPanel.List.GetSelectedRow()
-			if row != nil {
-				idx := row.GetIndex()
-				patchToApply := pendingPatches[idx]
-				err := apply.ApplyPatch(".", patchToApply)
 
-				// helper to clean up the UI after a successful (or forced) apply
-				appliedFunc := func() {
-					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
-					pendingPanel.List.Remove(row)
-					updateStatus(statusLabel, "Patch applied and verified")
-					clearAllSelections()
-					refreshHistory(historyPanel.List)
-				}
+		idx := row.GetIndex()
+		patchToApply := pendingPatches[idx]
 
-				if err == nil {
+		// Check if workspace is dirty
+		stat, _ := exec.Command("git", "status", "--porcelain").Output()
+		isDirty := len(strings.TrimSpace(string(stat))) > 0
+
+		shouldProceed := false
+		if isDirty {
+			// Present the 3-way choice: Stash & Apply, Apply Directly, or Cancel
+			choice := askStashOrApply(win)
+			if choice == 1 {
+				// User chose Stash & Apply
+				exec.Command("git", "stash", "push", "-m", "GoCtx: Pre-patch stash").Run()
+				shouldProceed = true
+			} else if choice == 0 {
+				// User chose Apply Directly
+				shouldProceed = true
+			}
+			// If choice is -1 (Cancel), shouldProceed remains false
+		} else {
+			// Clean workspace, just standard confirmation
+			shouldProceed = confirmAction(win, "Apply selected patch?")
+		}
+
+		if shouldProceed {
+			err := apply.ApplyPatch(".", patchToApply)
+
+			// helper to clean up the UI after a successful (or forced) apply
+			appliedFunc := func() {
+				pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
+				pendingPanel.List.Remove(row)
+				updateStatus(statusLabel, "Patch applied and verified")
+				clearAllSelections()
+				refreshHistory(historyPanel.List)
+			}
+
+			if err == nil {
+				appliedFunc()
+			} else if strings.Contains(err.Error(), "PATCH_ERROR") {
+				// Hard failure: Hunk mismatch or FS error (no stash created by apply.go)
+				updateStatus(statusLabel, "Patch failed to apply")
+				RenderError(err)
+			} else {
+				// Verification failed (Build/Test). ApplyPatch stashed the failing changes.
+				RenderError(err)
+				confirmMsg := "Verification failed (Build/Test). Changes were stashed. Pop stash to keep them anyway?"
+				if confirmAction(win, confirmMsg) {
+					// Restore the stashed changes that caused the build failure
+					exec.Command("git", "stash", "pop").Run()
 					appliedFunc()
-				} else if strings.Contains(err.Error(), "PATCH_ERROR") {
-					// Hard failure: Hunk mismatch or FS error (no stash created by apply.go)
-					updateStatus(statusLabel, "Patch failed to apply")
-					RenderError(err)
+					updateStatus(statusLabel, "Patch integrated (verification ignored)")
 				} else {
-					// Verification failed (Build/Test). ApplyPatch stashed the failing changes.
-					RenderError(err)
-					confirmMsg := "Verification failed (Build/Test). Changes were stashed. Pop stash to keep them anyway?"
-					if confirmAction(win, confirmMsg) {
-						// Restore the stashed changes that caused the build failure
-						exec.Command("git", "stash", "pop").Run()
-						appliedFunc()
-						updateStatus(statusLabel, "Patch integrated (verification ignored)")
-					} else {
-						updateStatus(statusLabel, "Verification failed (changes stashed)")
-					}
+					updateStatus(statusLabel, "Verification failed (changes stashed)")
 				}
 			}
 		}
