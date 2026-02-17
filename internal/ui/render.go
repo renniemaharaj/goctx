@@ -174,10 +174,15 @@ func getTag(n string) *gtk.TextTag {
 func RenderError(err error) {
 	statsBuf.SetText("")
 	statsBuf.InsertWithTag(statsBuf.GetEndIter(), "=== APPLICATION / VERIFICATION FAILURE ===\n\n", getTag("deleted"))
-	
+
 	msg := err.Error()
-	// If the error contains build/test output with newlines, it will be preserved here
 	statsBuf.Insert(statsBuf.GetEndIter(), msg+"\n")
+
+	// Apply syntax highlighting to the error output to help identify issues
+	highlight(statsBuf, `(?i)error:.*`, "deleted")
+	highlight(statsBuf, `(?i)failed:.*`, "deleted")
+	highlight(statsBuf, `line \d+`, "header")
+	highlight(statsBuf, `\./.*\.go:\d+:\d+`, "header")
 
 	updateStatus(statusLabel, "Error details rendered to panel")
 }

@@ -201,17 +201,19 @@ func Run() {
 			row := pendingPanel.List.GetSelectedRow()
 			if row != nil {
 				idx := row.GetIndex()
-				err := apply.ApplyPatch(".", pendingPatches[idx])
+				patchToApply := pendingPatches[idx]
+				err := apply.ApplyPatch(".", patchToApply)
 				if err == nil {
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
 					pendingPanel.List.Remove(row)
-					updateStatus(statusLabel, "Patch applied")
+					updateStatus(statusLabel, "Patch applied and verified")
 					clearAllSelections()
 					refreshHistory(historyPanel.List)
 				} else {
-					updateStatus(statusLabel, "Patch rejected: Check verification logs")
-					RenderError(err)
-					showDetailedError("Patch Verification Failed", "Verification scripts failed. Check the main panel for output.")
+					updateStatus(statusLabel, "Verification failed")
+					if confirmAction(win, "Patch verification (build/test) failed. View logs in the editor?") {
+						RenderError(err)
+					}
 				}
 			}
 		}
