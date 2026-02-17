@@ -215,14 +215,17 @@ func Run() {
 
 				if err == nil {
 					appliedFunc()
+				} else if strings.Contains(err.Error(), "PATCH_ERROR") {
+					// Hard failure: Hunk mismatch or FS error
+					updateStatus(statusLabel, "Patch failed to apply")
+					RenderError(err)
 				} else {
-					// Verification failed (Build or Test script returned an error)
-					confirmMsg := "Patch verification (build/test) failed. It's not recommended to integrate this patch, do you want to integrate it anyway?"
+					// Verification failed (Build/Test) but files ARE on disk
+					confirmMsg := "Patch verification (build/test) failed. The files were modified but checks failed. Integrate anyway?"
 					if confirmAction(win, confirmMsg) {
 						appliedFunc()
 					} else {
 						updateStatus(statusLabel, "Verification failed")
-						// Show the detailed build logs in the editor with syntax highlighting
 						RenderError(err)
 					}
 				}

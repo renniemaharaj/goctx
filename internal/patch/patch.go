@@ -22,9 +22,10 @@ func ParseHunks(content string) []Hunk {
 		dIdx := strings.Index(p, "======")
 
 		if sIdx != -1 && dIdx != -1 && dIdx > (sIdx+13) {
+			// Do not trim whitespace/newlines as it breaks exact matches
 			hunks = append(hunks, Hunk{
-				Search:  strings.Trim(p[sIdx+13:dIdx], "\n\r "),
-				Replace: strings.Trim(p[dIdx+6:], "\n\r "),
+				Search:  p[sIdx+13 : dIdx],
+				Replace: p[dIdx+6:],
 			})
 		}
 	}

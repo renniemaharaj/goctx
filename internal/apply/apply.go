@@ -31,10 +31,8 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		return fmt.Errorf("no files to apply")
 	}
 
-	// _, err := stash.CreateStash(root, input)
-	// if err != nil {
-	// 	return err
-	// }
+	// Create an auto-stash for safety
+	stash.Push(root, "GoCtx Auto-stash before patch: "+input.ShortDescription)
 
 	for path, content := range input.Files {
 		if !safePath(root, path) {
@@ -58,9 +56,9 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		}
 
 		if applyErr != nil {
-			// High-integrity rollback: restore from the stash created at the start of this operation
-			_ = exec.Command("git", "stash", "pop", "--index").Run()
-			return fmt.Errorf("critical failure at %s; workspace rolled back: %w", path, applyErr)
+			// Rollback
+			_ = exec.Command("git", "stash", "pop").Run()
+			return fmt.Errorf("PATCH_ERROR: Failed to update %s: %w", path, applyErr)
 		}
 	}
 
