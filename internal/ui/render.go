@@ -176,6 +176,7 @@ func RenderError(err error) {
 	statsBuf.InsertWithTag(statsBuf.GetEndIter(), "=== APPLICATION / VERIFICATION FAILURE ===\n\n", getTag("deleted"))
 
 	msg := err.Error()
+	// If the error contains build/test output with newlines, it will be preserved here
 	statsBuf.Insert(statsBuf.GetEndIter(), msg+"\n")
 
 	// Apply syntax highlighting to the error output to help identify issues

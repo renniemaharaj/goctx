@@ -203,6 +203,8 @@ func Run() {
 				idx := row.GetIndex()
 				patchToApply := pendingPatches[idx]
 				err := apply.ApplyPatch(".", patchToApply)
+
+				// helper to clean up the UI after a successful (or forced) apply
 				appliedFunc := func() {
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
 					pendingPanel.List.Remove(row)
@@ -210,14 +212,17 @@ func Run() {
 					clearAllSelections()
 					refreshHistory(historyPanel.List)
 				}
+
 				if err == nil {
 					appliedFunc()
-
 				} else {
-					if confirmAction(win, "Patch verification (build/test) failed. It's not recommended to integrate this patch, do you want to integrate them?") {
+					// Verification failed (Build or Test script returned an error)
+					confirmMsg := "Patch verification (build/test) failed. It's not recommended to integrate this patch, do you want to integrate it anyway?"
+					if confirmAction(win, confirmMsg) {
 						appliedFunc()
 					} else {
 						updateStatus(statusLabel, "Verification failed")
+						// Show the detailed build logs in the editor with syntax highlighting
 						RenderError(err)
 					}
 				}
