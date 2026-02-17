@@ -63,7 +63,6 @@ func BuildContext(root string) (model.ProjectOutput, error) {
 	}
 
 	output.ProjectTree = tree.String()
-	output.EstimatedTokens = (totalChars + len(output.ProjectTree)) / 4
 
 	return output, nil
 }

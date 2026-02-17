@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"goctx/internal/apply"
 	"goctx/internal/builder"
 	"goctx/internal/model"
@@ -208,7 +207,7 @@ func Run() {
 					pathMu.Unlock()
 					statsView.SetEditable(false)
 					renderDiff(activeContext, "Current Workspace State")
-					updateStatus(statusLabel, fmt.Sprintf("Context built (%d tokens)", out.EstimatedTokens))
+					updateStatus(statusLabel, "Context built successfully")
 				})
 			}
 		}()

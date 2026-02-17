@@ -3,6 +3,7 @@ package builder
 import (
 	"bytes"
 	"fmt"
+	"goctx/internal/config"
 	"goctx/internal/model"
 	"os"
 	"path/filepath"
@@ -12,37 +13,31 @@ import (
 )
 
 const AI_PROMPT_HEADER = `
-SYSTEM INSTRUCTION HEADER: GoCtx Patch Protocol
-
-1. JSON Schema:
-   Use ProjectOutput:
-   - InstructionHeader (string, optional)
+System instruction header: GoCtx Patch Protocol
+1. json schema:
+   Use type ProjectOutput struct unmarshallable json object:
    - ShortDescription (string, optional)
-   - EstimatedTokens (int)
    - ProjectTree (string)
    - Files (map[string]string) — 
      * For existing files, use SEARCH/REPLACE format.
      * For new files, send full content.
-
+	 * Use the native code block to present response project outputs with patches that do not fail build or tests
 2. Patch Rules:
    - SEARCH block must match old lines exactly (including indentation).
    - Include sufficient context lines to avoid collisions (3-5 lines recommended).
    - All changes must be atomic and auto-stashed.
    - Prioritize small patches over monolithic rewrites.
-
 3. Workflow Guidance:
    - Scan clipboard or other inputs for ProjectOutput objects.
    - If patches stop working:
      * Request fresh context from the user.
      * Optionally send raw file content for manual replacement.
    - Explicitly indicate patch mode: "surgical" or "full".
-
 4. Examples:
    - Surgical patch for existing file:
      "path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>> REPLACE"
    - Full file creation:
      "path/new_file.go": "[full file content]"
-
 Please wrap your output patches in your native code editor or code block for user to copy
 `
 
@@ -80,7 +75,9 @@ func BuildSelectiveContext(root string, description string, whitelist []string, 
 
 	// Smart Mode: LSP-like resolution of dependencies
 	if smartMode {
-		related := SmartResolve(root, whitelist)
+		cfg, _ := config.Load(root)
+		// Pass the build command to SmartResolve so it can find broken files
+		related := SmartResolve(root, whitelist, cfg.Scripts.Build)
 		for _, r := range related {
 			// Only add if not explicitly selected (we will process priority later)
 			if !filter[r] {
@@ -94,9 +91,8 @@ func BuildSelectiveContext(root string, description string, whitelist []string, 
 
 	absRoot, _ := filepath.Abs(root)
 	out := model.ProjectOutput{
-		InstructionHeader: AI_PROMPT_HEADER,
-		ShortDescription:  description,
-		Files:             make(map[string]string),
+		ShortDescription: description,
+		Files:            make(map[string]string),
 	}
 
 	ignorePatterns := LoadIgnorePatterns(absRoot)
@@ -183,6 +179,5 @@ func BuildSelectiveContext(root string, description string, whitelist []string, 
 	}
 
 	out.ProjectTree = tree.String()
-	out.EstimatedTokens = totalTokens + (len(out.ProjectTree) / 4)
 	return out, nil
 }

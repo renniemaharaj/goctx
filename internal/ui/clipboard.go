@@ -93,20 +93,6 @@ func addPatchToSidebar(input model.ProjectOutput) {
 
 	title := input.ShortDescription
 
-	// Fallback to InstructionHeader if ShortDescription is empty
-	if title == "" && input.InstructionHeader != "" {
-		for _, line := range strings.Split(input.InstructionHeader, "\n") {
-			cleanLine := strings.TrimSpace(line)
-			if cleanLine != "" {
-				title = cleanLine
-				if len(title) > 50 {
-					title = title[:47] + "..."
-				}
-				break
-			}
-		}
-	}
-
 	if title == "" {
 		title = fmt.Sprintf("Patch %d", len(pendingPatches))
 	}
