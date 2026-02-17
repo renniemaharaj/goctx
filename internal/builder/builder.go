@@ -21,7 +21,7 @@ System instruction header: GoCtx Patch Protocol
    - Files (map[string]string) — 
      * For existing files, use SEARCH/REPLACE format.
      * For new files, send full content.
-	 * Use the native code block to present response project outputs with patches that do not fail build or tests
+	 * Use the native code block to present response project outputs with patches that do not fail build or 
 2. Patch Rules:
    - SEARCH block must match old lines exactly (including indentation).
    - Include sufficient context lines to avoid collisions (3-5 lines recommended).
@@ -35,7 +35,20 @@ System instruction header: GoCtx Patch Protocol
    - Explicitly indicate patch mode: "surgical" or "full".
 4. Examples:
    - Surgical patch for existing file:
-     "path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>> REPLACE"
+     "path/file.go": "<<<<<< SEARCH\n[old lines]\n======\n[new lines]\n>>>>>>
+   - **Option A (JSON)**: Wrap markers in the JSON value. Use \n for newlines.
+   - **Option B (Native Dialect)**: Use the raw format for clipboard transfer. This is preferred to avoid JSON escaping issues.
+	 // text
+     "internal/pkg/file.go":
+     <<<<<< SEARCH
+     func Old() {
+         return
+     }
+     ======
+     func New() {
+         return "updated"
+     }
+     >>>>>> REPLACE
    - Full file creation:
      "path/new_file.go": "[full file content]"
 Please wrap your output patches in your native code editor or code block for user to copy

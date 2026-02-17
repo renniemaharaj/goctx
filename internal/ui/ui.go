@@ -17,6 +17,7 @@ import (
 var (
 	activeContext      model.ProjectOutput
 	lastClipboard      string
+	lastAppliedDesc    string
 	statsBuf           *gtk.TextBuffer
 	statsView          *gtk.TextView
 	treeStore          *gtk.TreeStore
@@ -331,6 +332,7 @@ func Run() {
 				updateStatus(statusLabel, "Patch applied and verified")
 				clearAllSelections()
 				refreshHistory(historyPanel.List)
+				lastAppliedDesc = patchToApply.ShortDescription
 			}
 
 			if err == nil {
@@ -386,14 +388,23 @@ func Run() {
 	})
 
 	btnCommit.Connect("clicked", func() {
-		if confirmAction(win, "Commit changes?") {
-			exec.Command("git", "add", ".").Run()
-			if err := exec.Command("git", "commit", "-m", "GoCtx: patch").Run(); err != nil {
-				updateStatus(statusLabel, "Failed: "+err.Error())
-			} else {
-				updateStatus(statusLabel, "Committed")
-				refreshHistory(historyPanel.List)
-			}
+		defaultMsg := lastAppliedDesc
+		if defaultMsg == "" {
+			defaultMsg = "GoCtx: Manual Commit"
+		}
+
+		msg, ok := askForString(win, "Commit Message", defaultMsg)
+		if !ok || strings.TrimSpace(msg) == "" {
+			return
+		}
+
+		exec.Command("git", "add", ".").Run()
+		if err := exec.Command("git", "commit", "-m", msg).Run(); err != nil {
+			updateStatus(statusLabel, "Failed: "+err.Error())
+		} else {
+			updateStatus(statusLabel, "Committed")
+			refreshHistory(historyPanel.List)
+			lastAppliedDesc = ""
 		}
 	})
 

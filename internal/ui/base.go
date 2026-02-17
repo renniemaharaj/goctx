@@ -61,6 +61,27 @@ func label(box *gtk.Box, t string) {
 }
 
 // askStashOrApply returns: 1 for Stash & Apply, 0 for Apply Directly, -1 for Cancel
+func askForString(parent *gtk.Window, title, defaultText string) (string, bool) {
+	d := gtk.MessageDialogNew(parent, gtk.DIALOG_MODAL, gtk.MESSAGE_OTHER, gtk.BUTTONS_OK_CANCEL, "%s", title)
+	
+	content, _ := d.GetContentArea()
+	entry, _ := gtk.EntryNew()
+	entry.SetText(defaultText)
+	entry.SetMarginStart(10)
+	entry.SetMarginEnd(10)
+	entry.Connect("activate", func() { d.Response(gtk.RESPONSE_OK) })
+	
+	content.Add(entry)
+	content.ShowAll()
+
+	resp := d.Run()
+	text, _ := entry.GetText()
+	d.Destroy()
+
+	return text, resp == gtk.RESPONSE_OK
+}
+
+// askStashOrApply returns: 1 for Stash & Apply, 0 for Apply Directly, -1 for Cancel
 func askStashOrApply(parent *gtk.Window) int {
 	d := gtk.MessageDialogNew(parent, gtk.DIALOG_MODAL, gtk.MESSAGE_QUESTION, gtk.BUTTONS_NONE, "Workspace is DIRTY. How would you like to proceed?")
 

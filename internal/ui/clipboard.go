@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"goctx/internal/model"
+	"goctx/internal/patch"
 	"os/exec"
 	"strings"
 
@@ -32,6 +33,13 @@ func processClipboard(text string) {
 					outputs = append(outputs, p)
 				}
 			}
+		}
+	}
+
+	if len(outputs) == 0 {
+		// Fallback: Try Native Dialect (file: SEARCH/REPLACE blocks)
+		if native, ok := patch.ParseNative(text); ok {
+			outputs = append(outputs, native)
 		}
 	}
 
