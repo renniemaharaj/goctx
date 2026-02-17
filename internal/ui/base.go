@@ -27,7 +27,7 @@ func resetView() {
 }
 
 func confirmAction(parent *gtk.Window, m string) bool {
-	d := gtk.MessageDialogNew(parent, gtk.DIALOG_MODAL, gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO, m)
+	d := gtk.MessageDialogNew(parent, gtk.DIALOG_MODAL, gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO, "%s", m)
 	r := d.Run()
 	d.Destroy()
 	return r == gtk.RESPONSE_YES

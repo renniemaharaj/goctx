@@ -262,8 +262,8 @@ func Run() {
 }
 
 func showDetailedError(title, msg string) {
-	dialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, title)
-	dialog.FormatSecondaryText(msg)
+	dialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", title)
+	dialog.FormatSecondaryText("%s", msg)
 	dialog.Run()
 	dialog.Destroy()
 }
