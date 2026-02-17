@@ -29,7 +29,8 @@ func main() {
 }
 
 func runBuild() {
-	output, _ := builder.BuildSelectiveContext(".", "Manual Build", nil)
+	// CLI default: 128k context, no smart mode unless specified (simplification)
+	output, _ := builder.BuildSelectiveContext(".", "Manual Build", nil, 128000, false)
 	json.NewEncoder(os.Stdout).Encode(output)
 }
 

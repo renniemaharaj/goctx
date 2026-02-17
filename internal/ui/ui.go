@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"goctx/internal/apply"
 	"goctx/internal/builder"
 	"goctx/internal/model"
@@ -35,6 +36,8 @@ var (
 	isRefreshing       bool
 	debounceID         glib.SourceHandle
 	mainTreeView       *gtk.TreeView
+	tokenScale         *gtk.Scale
+	smartCheck         *gtk.CheckButton
 )
 
 func Run() {
@@ -84,9 +87,29 @@ func Run() {
 
 	vSidebarInner.Pack1(historyPanel.Container, true, false)
 
-	// Context Tree
+	// Context Tree & Controls
 	contextTreeBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
 	label(contextTreeBox, "CONTEXT SELECTION")
+
+	// Token Budget Control
+	boxBudget, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	boxBudget.SetMarginStart(10)
+	boxBudget.SetMarginEnd(10)
+	lblBudget, _ := gtk.LabelNew("Token Budget")
+	lblBudget.SetXAlign(0)
+	tokenScale, _ = gtk.ScaleNewWithRange(gtk.ORIENTATION_HORIZONTAL, 1000, 128000, 1000)
+	tokenScale.SetValue(32000) // Default 32k
+	tokenScale.SetDrawValue(true)
+	boxBudget.PackStart(lblBudget, false, false, 0)
+	boxBudget.PackStart(tokenScale, false, false, 0)
+	contextTreeBox.PackStart(boxBudget, false, false, 5)
+
+	// Smart Context Checkbox
+	smartCheck, _ = gtk.CheckButtonNewWithLabel("Smart Context (LSP Aware)")
+	smartCheck.SetTooltipText("Uses local Go tools to find related symbol definitions automatically")
+	smartCheck.SetMarginStart(10)
+	contextTreeBox.PackStart(smartCheck, false, false, 5)
+
 	mainTreeView, treeStore = setupContextTree()
 	treeScroll, _ := gtk.ScrolledWindowNew(nil, nil)
 	treeScroll.Add(mainTreeView)
@@ -172,9 +195,11 @@ func Run() {
 
 	// --- Logic ---
 	btnBuild.Connect("clicked", func() {
+		limit := int(tokenScale.GetValue())
+		smart := smartCheck.GetActive()
 		go func() {
 			selected := getCheckedFiles(treeStore)
-			out, err := builder.BuildSelectiveContext(".", "Manual Build", selected)
+			out, err := builder.BuildSelectiveContext(".", "Manual Build", selected, limit, smart)
 			if err == nil {
 				activeContext = out
 				glib.IdleAdd(func() {
@@ -183,7 +208,7 @@ func Run() {
 					pathMu.Unlock()
 					statsView.SetEditable(false)
 					renderDiff(activeContext, "Current Workspace State")
-					updateStatus(statusLabel, "Context built (filtered)")
+					updateStatus(statusLabel, fmt.Sprintf("Context built (%d tokens)", out.EstimatedTokens))
 				})
 			}
 		}()

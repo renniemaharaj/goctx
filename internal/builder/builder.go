@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"goctx/internal/model"
@@ -47,22 +46,6 @@ SYSTEM INSTRUCTION HEADER: GoCtx Patch Protocol
 Please wrap your output patches in your native code editor or code block for user to copy
 `
 
-func LoadIgnorePatterns(root string) []string {
-	patterns := []string{".git", ".stashes", "node_modules", "goctx", "go.sum", "ctx.json", ".exe", ".bin"}
-	f, err := os.Open(filepath.Join(root, ".ctxignore"))
-	if err == nil {
-		defer f.Close()
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if line != "" && !strings.HasPrefix(line, "#") {
-				patterns = append(patterns, line)
-			}
-		}
-	}
-	return patterns
-}
-
 func isBinary(data []byte) bool {
 	return bytes.Contains(data, []byte{0})
 }
@@ -71,14 +54,17 @@ func GetFileList(root string) ([]string, error) {
 	ignorePatterns := LoadIgnorePatterns(root)
 	var files []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() { return nil }
+		if err != nil || d.IsDir() {
+			return nil
+		}
 		rel, _ := filepath.Rel(root, path)
-		if rel == ".ctxignore" {
+		// Never ignore configuration files for context, but respect others
+		if rel == ".ctxignore" || rel == ".gitignore" {
 			files = append(files, rel)
 			return nil
 		}
-		for _, p := range ignorePatterns {
-			if strings.Contains(rel, p) { return nil }
+		if MatchesIgnore(rel, ignorePatterns) {
+			return nil
 		}
 		files = append(files, rel)
 		return nil
@@ -86,9 +72,25 @@ func GetFileList(root string) ([]string, error) {
 	return files, err
 }
 
-func BuildSelectiveContext(root string, description string, whitelist []string) (model.ProjectOutput, error) {
+func BuildSelectiveContext(root string, description string, whitelist []string, tokenLimit int, smartMode bool) (model.ProjectOutput, error) {
 	filter := make(map[string]bool)
-	for _, f := range whitelist { filter[f] = true }
+	for _, f := range whitelist {
+		filter[f] = true
+	}
+
+	// Smart Mode: LSP-like resolution of dependencies
+	if smartMode {
+		related := SmartResolve(root, whitelist)
+		for _, r := range related {
+			// Only add if not explicitly selected (we will process priority later)
+			if !filter[r] {
+				// We mark related files as 'implicit' in logic, but here we just add to filter for processing
+				// Priority logic: Whitelist > Related > Others (if we were doing full walk)
+				// Current logic: Selective Context only includes what is in filter.
+				filter[r] = true
+			}
+		}
+	}
 
 	absRoot, _ := filepath.Abs(root)
 	out := model.ProjectOutput{
@@ -102,7 +104,7 @@ func BuildSelectiveContext(root string, description string, whitelist []string) 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var allPaths []string
-	totalChars := 0
+	totalTokens := 0
 
 	for i := 0; i < 8; i++ {
 		go func() {
@@ -117,20 +119,21 @@ func BuildSelectiveContext(root string, description string, whitelist []string) 
 					fullPath := filepath.Join(dir, entry.Name())
 					relPath, _ := filepath.Rel(absRoot, fullPath)
 
-					ignored := false
-					if relPath != ".ctxignore" {
-						for _, p := range ignorePatterns {
-							if strings.Contains(relPath, p) {
-								ignored = true
-								break
-							}
-						}
+					if relPath == "." {
+						continue
+					}
+
+					// Use new ignore logic
+					ignored := MatchesIgnore(relPath, ignorePatterns)
+					if relPath == ".ctxignore" || relPath == ".gitignore" {
+						ignored = false
 					}
 
 					if ignored {
 						continue
 					}
 
+					// If we have a whitelist (from UI or Smart), only include those
 					if !entry.IsDir() && whitelist != nil && !filter[relPath] {
 						continue
 					}
@@ -146,8 +149,12 @@ func BuildSelectiveContext(root string, description string, whitelist []string) 
 						content, err := os.ReadFile(fullPath)
 						if err == nil && !isBinary(content) {
 							mu.Lock()
-							out.Files[relPath] = string(content)
-							totalChars += len(content)
+							// Budget Check
+							estTok := len(content) / 4
+							if totalTokens+estTok < tokenLimit {
+								out.Files[relPath] = string(content)
+								totalTokens += estTok
+							}
 							mu.Unlock()
 						}
 					}
@@ -176,6 +183,6 @@ func BuildSelectiveContext(root string, description string, whitelist []string) 
 	}
 
 	out.ProjectTree = tree.String()
-	out.EstimatedTokens = (totalChars + len(out.ProjectTree)) / 4
+	out.EstimatedTokens = totalTokens + (len(out.ProjectTree) / 4)
 	return out, nil
 }

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"goctx/internal/builder"
+
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
