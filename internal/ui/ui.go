@@ -4,6 +4,7 @@ import (
 	"goctx/internal/apply"
 	"goctx/internal/builder"
 	"goctx/internal/model"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -13,18 +14,21 @@ import (
 )
 
 var (
-	activeContext    model.ProjectOutput
-	lastClipboard    string
-	statsBuf         *gtk.TextBuffer
-	historyPanel     *ActionPanel
-	pendingPanel     *ActionPanel
-	pendingPatches   []model.ProjectOutput
-	win              *gtk.Window
-	statusLabel      *gtk.Label
-	btnApplyPatch    *gtk.Button
-	btnApplyCommit   *gtk.Button
-	btnCommit        *gtk.Button
-	lastHistoryCount int
+	activeContext      model.ProjectOutput
+	lastClipboard      string
+	statsBuf           *gtk.TextBuffer
+	statsView          *gtk.TextView
+	treeStore          *gtk.TreeStore
+	currentEditingPath string
+	historyPanel       *ActionPanel
+	pendingPanel       *ActionPanel
+	pendingPatches     []model.ProjectOutput
+	win                *gtk.Window
+	statusLabel        *gtk.Label
+	btnApplyPatch      *gtk.Button
+	btnApplyCommit     *gtk.Button
+	btnCommit          *gtk.Button
+	lastHistoryCount   int
 )
 
 func Run() {
@@ -77,7 +81,8 @@ func Run() {
 	// Context Tree
 	contextTreeBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
 	label(contextTreeBox, "CONTEXT SELECTION")
-	treeView, store := setupContextTree()
+	var treeView *gtk.TreeView
+	treeView, treeStore = setupContextTree()
 	treeScroll, _ := gtk.ScrolledWindowNew(nil, nil)
 	treeScroll.Add(treeView)
 	contextTreeBox.PackStart(treeScroll, true, true, 0)
@@ -90,13 +95,25 @@ func Run() {
 	// Content Area
 	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	statsScroll, _ := gtk.ScrolledWindowNew(nil, nil)
-	statsView, _ := gtk.TextViewNew()
+	statsView, _ = gtk.TextViewNew()
 	statsView.SetMonospace(true)
 	statsView.SetEditable(false)
 	statsView.SetLeftMargin(15)
 	statsView.SetTopMargin(15)
 	statsBuf, _ = statsView.GetBuffer()
 	setupTags(statsBuf)
+
+	// Live Ignore Auto-save
+	statsBuf.Connect("changed", func() {
+		if currentEditingPath != "" && strings.HasSuffix(currentEditingPath, ".ctxignore") {
+			text, _ := statsBuf.GetText(statsBuf.GetStartIter(), statsBuf.GetEndIter(), false)
+			os.WriteFile(currentEditingPath, []byte(text), 0644)
+			glib.IdleAdd(func() {
+				refreshTreeData(treeStore)
+			})
+		}
+	})
+
 	statsScroll.Add(statsView)
 	rightStack.PackStart(statsScroll, true, true, 0)
 
@@ -118,7 +135,7 @@ func Run() {
 	// --- Logic ---
 	btnBuild.Connect("clicked", func() {
 		go func() {
-			selected := getCheckedFiles(store)
+			selected := getCheckedFiles(treeStore)
 			out, err := builder.BuildSelectiveContext(".", "Manual Build", selected)
 			if err == nil {
 				activeContext = out
@@ -242,9 +259,19 @@ func Run() {
 		if ok {
 			pendingPanel.List.UnselectAll()
 			historyPanel.List.UnselectAll()
-			pathVal, _ := store.GetValue(iter, 2)
-			pathStr, _ := pathVal.GoValue()
-			RenderFile(pathStr.(string))
+			pathVal, _ := treeStore.GetValue(iter, 2)
+			pathRaw, _ := pathVal.GoValue()
+			pathStr := pathRaw.(string)
+
+			if strings.HasSuffix(pathStr, ".ctxignore") {
+				currentEditingPath = pathStr
+				statsView.SetEditable(true)
+			} else {
+				currentEditingPath = ""
+				statsView.SetEditable(false)
+			}
+
+			RenderFile(pathStr)
 		}
 	})
 

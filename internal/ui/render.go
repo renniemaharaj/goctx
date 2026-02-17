@@ -116,11 +116,16 @@ func RenderFile(path string) {
 	content := string(data)
 	statsBuf.SetText(content)
 
-	// Simple regex-based syntax highlighting for Go/JSON
+	// Simple regex-based syntax highlighting for Go/JSON/Ignore
 	highlight(statsBuf, `\b(func|package|import|type|struct|interface|return|if|else|for|range|go|chan|select|case|default|var|const|map|switch)\b`, "keyword")
 	highlight(statsBuf, `//.*`, "comment")
+	highlight(statsBuf, `^#.*`, "comment") // Shell/Ignore comments
 	highlight(statsBuf, `/\*[^*]*\*+([^/*][^*]*\*+)*/`, "comment")
-	highlight(statsBuf, `".*?"`, "added") // reuse 'added' green for strings
+	highlight(statsBuf, `".*?"`, "added") 
+
+	if strings.HasSuffix(path, ".ctxignore") {
+		highlight(statsBuf, `^[^#\s]+`, "header") // Highlight ignore patterns
+	}
 
 	updateStatus(statusLabel, "Viewing: "+path)
 }
