@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"goctx/internal/model"
+	"os/exec"
 	"strings"
 
 	"github.com/gotk3/gotk3/glib"
@@ -53,12 +54,14 @@ func dispatchPatches(outputs []model.ProjectOutput) {
 		}
 		updateStatus(statusLabel, fmt.Sprintf("Detected %d new patches", len(outputs)))
 
-		// Show alert dialog
-		dlg := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Patch Detected")
-		dlg.FormatSecondaryText("Successfully ingested %d patch(es) from clipboard.", len(outputs))
-		dlg.Run()
-		dlg.Destroy()
+		// Trigger system notification
+		sendNotification("Patch Detected", fmt.Sprintf("Successfully ingested %d patch(es) from clipboard.", len(outputs)))
 	})
+}
+
+func sendNotification(title, msg string) {
+	// Use notify-send (common on Linux/GTK environments)
+	_ = exec.Command("notify-send", "-a", "GoCtx", "-i", "emblem-symbolic", title, msg).Run()
 }
 
 // Helper to encapsulate the UI row creation logic
