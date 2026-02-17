@@ -30,6 +30,9 @@ var (
 	btnCommit          *gtk.Button
 	lastHistoryCount   int
 	isLoading          bool
+	isRefreshing       bool
+	debounceID         glib.SourceHandle
+	mainTreeView       *gtk.TreeView
 )
 
 func Run() {
@@ -82,10 +85,9 @@ func Run() {
 	// Context Tree
 	contextTreeBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
 	label(contextTreeBox, "CONTEXT SELECTION")
-	var treeView *gtk.TreeView
-	treeView, treeStore = setupContextTree()
+	mainTreeView, treeStore = setupContextTree()
 	treeScroll, _ := gtk.ScrolledWindowNew(nil, nil)
-	treeScroll.Add(treeView)
+	treeScroll.Add(mainTreeView)
 	contextTreeBox.PackStart(treeScroll, true, true, 0)
 
 	vSidebarInner.Pack2(contextTreeBox, true, false)
@@ -104,15 +106,28 @@ func Run() {
 	statsBuf, _ = statsView.GetBuffer()
 	setupTags(statsBuf)
 
-	// Live Ignore Auto-save
+	// Live Ignore Auto-save with Debounce and Selection Persistence
 	statsBuf.Connect("changed", func() {
-		if !isLoading && currentEditingPath != "" && strings.HasSuffix(currentEditingPath, ".ctxignore") {
+		if isLoading || currentEditingPath == "" || !strings.HasSuffix(currentEditingPath, ".ctxignore") {
+			return
+		}
+
+		if debounceID != 0 {
+			glib.SourceRemove(debounceID)
+		}
+
+		debounceID = glib.TimeoutAdd(500, func() bool {
 			text, _ := statsBuf.GetText(statsBuf.GetStartIter(), statsBuf.GetEndIter(), false)
 			_ = os.WriteFile(currentEditingPath, []byte(text), 0644)
-			glib.IdleAdd(func() {
-				refreshTreeData(treeStore)
-			})
-		}
+
+			isRefreshing = true
+			refreshTreeData(treeStore)
+			SelectPath(mainTreeView, treeStore, currentEditingPath)
+			isRefreshing = false
+
+			debounceID = 0
+			return false
+		})
 	})
 
 	statsScroll.Add(statsView)
@@ -254,8 +269,11 @@ func Run() {
 		}
 	})
 
-	treeView.Connect("cursor-changed", func() {
-		selection, _ := treeView.GetSelection()
+	mainTreeView.Connect("cursor-changed", func() {
+		if isRefreshing {
+			return
+		}
+		selection, _ := mainTreeView.GetSelection()
 		_, iter, ok := selection.GetSelected()
 		if ok {
 			pendingPanel.List.UnselectAll()
