@@ -3,7 +3,6 @@ package apply
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -31,9 +30,6 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		return fmt.Errorf("no files to apply")
 	}
 
-	// Create an auto-stash for safety
-	stash.Push(root, "GoCtx Auto-stash before patch: "+input.ShortDescription)
-
 	for path, content := range input.Files {
 		if !safePath(root, path) {
 			continue
@@ -56,9 +52,7 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		}
 
 		if applyErr != nil {
-			// Rollback
-			_ = exec.Command("git", "stash", "pop").Run()
-			return fmt.Errorf("PATCH_ERROR: Failed to update %s: %w", path, applyErr)
+			return fmt.Errorf("PATCH_ERROR: Critical failure at %s: %w", path, applyErr)
 		}
 	}
 
@@ -81,6 +75,7 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 
 	return nil
 }
+
 func applySurgicalEdit(path string, hunks []patch.Hunk) error {
 	originalData, err := os.ReadFile(path)
 	if err != nil {

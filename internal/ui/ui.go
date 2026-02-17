@@ -216,17 +216,20 @@ func Run() {
 				if err == nil {
 					appliedFunc()
 				} else if strings.Contains(err.Error(), "PATCH_ERROR") {
-					// Hard failure: Hunk mismatch or FS error
+					// Hard failure: Hunk mismatch or FS error (no stash created by apply.go)
 					updateStatus(statusLabel, "Patch failed to apply")
 					RenderError(err)
 				} else {
-					// Verification failed (Build/Test) but files ARE on disk
-					confirmMsg := "Patch verification (build/test) failed. The files were modified but checks failed. Integrate anyway?"
+					// Verification failed (Build/Test). ApplyPatch stashed the failing changes.
+					RenderError(err)
+					confirmMsg := "Verification failed (Build/Test). Changes were stashed. Pop stash to keep them anyway?"
 					if confirmAction(win, confirmMsg) {
+						// Restore the stashed changes that caused the build failure
+						exec.Command("git", "stash", "pop").Run()
 						appliedFunc()
+						updateStatus(statusLabel, "Patch integrated (verification ignored)")
 					} else {
-						updateStatus(statusLabel, "Verification failed")
-						RenderError(err)
+						updateStatus(statusLabel, "Verification failed (changes stashed)")
 					}
 				}
 			}
