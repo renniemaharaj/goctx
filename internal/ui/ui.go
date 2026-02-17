@@ -203,12 +203,16 @@ func Run() {
 				idx := row.GetIndex()
 				patchToApply := pendingPatches[idx]
 				err := apply.ApplyPatch(".", patchToApply)
-				if err == nil {
+				appliedFunc := func() {
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
 					pendingPanel.List.Remove(row)
 					updateStatus(statusLabel, "Patch applied and verified")
 					clearAllSelections()
 					refreshHistory(historyPanel.List)
+				}
+				if err == nil {
+					appliedFunc()
+
 				} else {
 					updateStatus(statusLabel, "Verification failed")
 					if confirmAction(win, "Patch verification (build/test) failed. View logs in the editor?") {
