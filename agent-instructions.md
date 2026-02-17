@@ -7,13 +7,7 @@ To improve efficiency and reliability, use **Surgical SEARCH/REPLACE blocks** fo
 1. **Uniqueness vs. Brevity**: Provide enough context lines (3-5) to ensure a unique match, but avoid excessive vertical context. This optimizes the granular diff view for the human reviewer.
 2. **Exact Match**: The content in the `SEARCH` block must be an exact character-for-character match (including indentation) of the target file.
 3. **Formatting**: Always wrap the markers in the JSON value. Use `\n` for newlines.
-
-### Response Format Example:
-```json
-{
-  "short_description": "Refactor types",
-  "files": {
-    "path/file.go": "<<<<<< SEARCH\nfunc old() { ... }\n======\nfunc new() { ... }\n>>>>>> REPLACE"
+\nfunc new() { ... }\n======\nfunc new() { ... }\n>>>>>> REPLACE"
   }
 }
 ```
