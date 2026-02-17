@@ -9,33 +9,49 @@ import (
 
 func showKeyManager() {
 	dialog, _ := gtk.DialogNew()
-	dialog.SetTitle("Gemini API Keys")
+	dialog.SetTitle("API Key Management")
 	dialog.SetTransientFor(win)
 	dialog.SetModal(true)
-	dialog.AddButton("Save", gtk.RESPONSE_OK)
-	dialog.AddButton("Cancel", gtk.RESPONSE_CANCEL)
+	dialog.AddButton("_Cancel", gtk.RESPONSE_CANCEL)
+	dialog.AddButton("_Save Keys", gtk.RESPONSE_OK)
 
-	dialog.SetDefaultSize(500, 400)
+	// Professional sizing: slightly narrower and taller for better list reading
+	dialog.SetDefaultSize(450, 480)
 
 	content, _ := dialog.GetContentArea()
 
-	vbox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
-	vbox.SetMarginStart(15)
-	vbox.SetMarginEnd(15)
-	vbox.SetMarginTop(15)
-	vbox.SetMarginBottom(15)
+	vbox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 12)
+	vbox.SetMarginStart(18)
+	vbox.SetMarginEnd(18)
+	vbox.SetMarginTop(18)
+	vbox.SetMarginBottom(18)
 
-	desc, _ := gtk.LabelNew("Enter your Google Gemini API Keys (one per line). Keys are stored locally in goctx.json.")
+	// Header
+	headerLbl, _ := gtk.LabelNew("")
+	headerLbl.SetMarkup("<span weight='bold' size='large'>Google Gemini Configuration</span>")
+	headerLbl.SetXAlign(0)
+	vbox.PackStart(headerLbl, false, false, 0)
+
+	desc, _ := gtk.LabelNew("Format: API_KEY=MODEL_NAME (e.g. AIza...=gemini-2.0-flash). Keys are stored securely in keys.json.")
 	desc.SetLineWrap(true)
 	desc.SetXAlign(0)
+	desc.SetOpacity(0.7)
 	vbox.PackStart(desc, false, false, 0)
+
+	sep, _ := gtk.SeparatorNew(gtk.ORIENTATION_HORIZONTAL)
+	vbox.PackStart(sep, false, false, 4)
 
 	sw, _ := gtk.ScrolledWindowNew(nil, nil)
 	sw.SetShadowType(gtk.SHADOW_IN)
+	sw.SetVExpand(true)
 
-	tv, _ := gtk.TextViewNew()
-	tv.SetMonospace(true)
-	buf, _ := tv.GetBuffer()
+	ttv, _ := gtk.TextViewNew()
+	ttv.SetMonospace(true)
+	ttv.SetLeftMargin(8)
+	ttv.SetRightMargin(8)
+	ttv.SetTopMargin(8)
+	ttv.SetBottomMargin(8)
+	buf, _ := ttv.GetBuffer()
 
 	keys, _ := config.LoadKeys(".")
 	var sb strings.Builder
@@ -44,7 +60,7 @@ func showKeyManager() {
 	}
 	buf.SetText(sb.String())
 
-	sw.Add(tv)
+	sw.Add(ttv)
 	vbox.PackStart(sw, true, true, 0)
 
 	content.Add(vbox)
