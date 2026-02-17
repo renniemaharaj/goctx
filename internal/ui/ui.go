@@ -29,6 +29,7 @@ var (
 	btnApplyCommit     *gtk.Button
 	btnCommit          *gtk.Button
 	lastHistoryCount   int
+	isLoading          bool
 )
 
 func Run() {
@@ -105,9 +106,9 @@ func Run() {
 
 	// Live Ignore Auto-save
 	statsBuf.Connect("changed", func() {
-		if currentEditingPath != "" && strings.HasSuffix(currentEditingPath, ".ctxignore") {
+		if !isLoading && currentEditingPath != "" && strings.HasSuffix(currentEditingPath, ".ctxignore") {
 			text, _ := statsBuf.GetText(statsBuf.GetStartIter(), statsBuf.GetEndIter(), false)
-			os.WriteFile(currentEditingPath, []byte(text), 0644)
+			_ = os.WriteFile(currentEditingPath, []byte(text), 0644)
 			glib.IdleAdd(func() {
 				refreshTreeData(treeStore)
 			})
@@ -263,6 +264,7 @@ func Run() {
 			pathRaw, _ := pathVal.GoValue()
 			pathStr := pathRaw.(string)
 
+			isLoading = true
 			if strings.HasSuffix(pathStr, ".ctxignore") {
 				currentEditingPath = pathStr
 				statsView.SetEditable(true)
@@ -272,6 +274,7 @@ func Run() {
 			}
 
 			RenderFile(pathStr)
+			isLoading = false
 		}
 	})
 

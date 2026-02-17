@@ -73,6 +73,10 @@ func GetFileList(root string) ([]string, error) {
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() { return nil }
 		rel, _ := filepath.Rel(root, path)
+		if rel == ".ctxignore" {
+			files = append(files, rel)
+			return nil
+		}
 		for _, p := range ignorePatterns {
 			if strings.Contains(rel, p) { return nil }
 		}
@@ -114,10 +118,12 @@ func BuildSelectiveContext(root string, description string, whitelist []string) 
 					relPath, _ := filepath.Rel(absRoot, fullPath)
 
 					ignored := false
-					for _, p := range ignorePatterns {
-						if strings.Contains(relPath, p) {
-							ignored = true
-							break
+					if relPath != ".ctxignore" {
+						for _, p := range ignorePatterns {
+							if strings.Contains(relPath, p) {
+								ignored = true
+								break
+							}
 						}
 					}
 
