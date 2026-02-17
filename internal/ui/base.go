@@ -22,7 +22,16 @@ func clearAllSelections() {
 func resetView() {
 	btnApplyPatch.SetSensitive(false)
 	btnApplyCommit.SetSensitive(false)
+
+	pathMu.Lock()
+	currentEditingPath = ""
+	pathMu.Unlock()
+
+	isLoading = true
 	statsBuf.SetText("")
+	statsView.SetEditable(false)
+	isLoading = false
+
 	updateStatus(statusLabel, "Selection cleared")
 }
 

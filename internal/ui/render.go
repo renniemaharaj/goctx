@@ -15,6 +15,9 @@ import (
 )
 
 func renderDiff(p model.ProjectOutput, title string) {
+	isLoading = true
+	defer func() { isLoading = false }()
+
 	statsBuf.SetText("")
 	statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("=== %s ===\n\n", strings.ToUpper(title)), getTag("header"))
 
@@ -111,6 +114,9 @@ func RenderFile(path string) {
 		RenderError(err)
 		return
 	}
+
+	isLoading = true
+	defer func() { isLoading = false }()
 
 	statsBuf.SetText("")
 	content := string(data)

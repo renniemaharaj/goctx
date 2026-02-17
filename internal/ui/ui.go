@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
@@ -20,6 +21,7 @@ var (
 	statsView          *gtk.TextView
 	treeStore          *gtk.TreeStore
 	currentEditingPath string
+	pathMu             sync.RWMutex
 	historyPanel       *ActionPanel
 	pendingPanel       *ActionPanel
 	pendingPatches     []model.ProjectOutput
@@ -106,9 +108,17 @@ func Run() {
 	statsBuf, _ = statsView.GetBuffer()
 	setupTags(statsBuf)
 
-	// Live Ignore Auto-save with Debounce and Selection Persistence
+	// Live Ignore Auto-save with Debounce and Path-Locking
 	statsBuf.Connect("changed", func() {
-		if isLoading || currentEditingPath == "" || !strings.HasSuffix(currentEditingPath, ".ctxignore") {
+		if isLoading || !statsView.GetEditable() {
+			return
+		}
+
+		pathMu.RLock()
+		frozenPath := currentEditingPath
+		pathMu.RUnlock()
+
+		if frozenPath == "" || !strings.HasSuffix(frozenPath, ".ctxignore") {
 			return
 		}
 
@@ -117,12 +127,24 @@ func Run() {
 		}
 
 		debounceID = glib.TimeoutAdd(500, func() bool {
+			pathMu.RLock()
+			activePath := currentEditingPath
+			pathMu.RUnlock()
+
+			// Ensure we are still looking at the same file that triggered the save
+			if activePath != frozenPath {
+				return false
+			}
+
 			text, _ := statsBuf.GetText(statsBuf.GetStartIter(), statsBuf.GetEndIter(), false)
-			_ = os.WriteFile(currentEditingPath, []byte(text), 0644)
+			err := os.WriteFile(activePath, []byte(text), 0644)
+			if err != nil {
+				updateStatus(statusLabel, "Error saving: "+err.Error())
+			}
 
 			isRefreshing = true
 			refreshTreeData(treeStore)
-			SelectPath(mainTreeView, treeStore, currentEditingPath)
+			SelectPath(mainTreeView, treeStore, activePath)
 			isRefreshing = false
 
 			debounceID = 0
@@ -156,6 +178,10 @@ func Run() {
 			if err == nil {
 				activeContext = out
 				glib.IdleAdd(func() {
+					pathMu.Lock()
+					currentEditingPath = ""
+					pathMu.Unlock()
+					statsView.SetEditable(false)
 					renderDiff(activeContext, "Current Workspace State")
 					updateStatus(statusLabel, "Context built (filtered)")
 				})
@@ -175,6 +201,12 @@ func Run() {
 			return
 		}
 		historyPanel.List.UnselectAll()
+		
+		pathMu.Lock()
+		currentEditingPath = ""
+		pathMu.Unlock()
+		statsView.SetEditable(false)
+
 		idx := row.GetIndex()
 		renderDiff(pendingPatches[idx], "Pending Patch Preview")
 		btnApplyPatch.SetSensitive(true)
@@ -184,6 +216,12 @@ func Run() {
 	historyPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
 		if row != nil {
 			pendingPanel.List.UnselectAll()
+			
+			pathMu.Lock()
+			currentEditingPath = ""
+			pathMu.Unlock()
+			statsView.SetEditable(false)
+
 			lblWidget, _ := row.GetChild()
 			lbl, _ := lblWidget.(*gtk.Label)
 			fullText, _ := lbl.GetText()
@@ -192,9 +230,13 @@ func Run() {
 				hash := parts[0]
 				showCmd := exec.Command("git", "show", "--color=never", hash)
 				out, _ := showCmd.Output()
+			
+				isLoading = true
 				statsBuf.SetText("")
 				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "COMMIT PREVIEW: "+hash+"\n\n", getTag("header"))
 				statsBuf.Insert(statsBuf.GetEndIter(), string(out))
+				isLoading = false
+
 				btnApplyCommit.SetSensitive(true)
 				btnApplyPatch.SetSensitive(false)
 			}
@@ -282,12 +324,15 @@ func Run() {
 			pathRaw, _ := pathVal.GoValue()
 			pathStr := pathRaw.(string)
 
+			// Atomic update of the current editing path
+			pathMu.Lock()
+			currentEditingPath = pathStr
+			pathMu.Unlock()
+
 			isLoading = true
 			if strings.HasSuffix(pathStr, ".ctxignore") {
-				currentEditingPath = pathStr
 				statsView.SetEditable(true)
 			} else {
-				currentEditingPath = ""
 				statsView.SetEditable(false)
 			}
 
