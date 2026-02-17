@@ -214,8 +214,10 @@ func Run() {
 					appliedFunc()
 
 				} else {
-					updateStatus(statusLabel, "Verification failed")
-					if confirmAction(win, "Patch verification (build/test) failed. View logs in the editor?") {
+					if confirmAction(win, "Patch verification (build/test) failed. It's not recommended to integrate this patch, do you want to integrate them?") {
+						appliedFunc()
+					} else {
+						updateStatus(statusLabel, "Verification failed")
 						RenderError(err)
 					}
 				}
