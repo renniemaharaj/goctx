@@ -51,11 +51,31 @@ func dispatchPatches(outputs []model.ProjectOutput) {
 	glib.IdleAdd(func() {
 		for _, p := range outputs {
 			addPatchToSidebar(p)
+
+			// Extract meaningful metadata for the notification
+			title := "Patch Ingested"
+			desc := p.ShortDescription
+			if desc == "" {
+				desc = "AI-generated update"
+			}
+
+			fileCount := len(p.Files)
+			var body string
+			if fileCount == 1 {
+				// If it's a single file, identify it in the notification
+				var targetFile string
+				for path := range p.Files {
+					targetFile = path
+					break
+				}
+				body = fmt.Sprintf("%s\nTarget: %s", desc, targetFile)
+			} else {
+				body = fmt.Sprintf("%s\nModified %d files", desc, fileCount)
+			}
+
+			sendNotification(title, body)
 		}
 		updateStatus(statusLabel, fmt.Sprintf("Detected %d new patches", len(outputs)))
-
-		// Trigger system notification
-		sendNotification("Patch Detected", fmt.Sprintf("Successfully ingested %d patch(es) from clipboard.", len(outputs)))
 	})
 }
 
