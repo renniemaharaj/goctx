@@ -4,9 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gotk3/gotk3/gtk"
 )
+
+func truncate(s string, limit int) string {
+	if utf8.RuneCountInString(s) <= limit {
+		return s
+	}
+
+	runes := []rune(s)
+	return string(runes[:limit]) + "..."
+}
 
 func mustMarshal(v interface{}) []byte {
 	b, _ := json.MarshalIndent(v, "", "  ")
@@ -43,7 +53,7 @@ func confirmAction(parent *gtk.Window, m string) bool {
 }
 
 func updateStatus(lbl *gtk.Label, m string) {
-	lbl.SetText(fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), m))
+	lbl.SetText(fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), truncate(m, 50)))
 }
 
 func newBtn(l string) *gtk.Button {
@@ -63,14 +73,14 @@ func label(box *gtk.Box, t string) {
 // askStashOrApply returns: 1 for Stash & Apply, 0 for Apply Directly, -1 for Cancel
 func askForString(parent *gtk.Window, title, defaultText string) (string, bool) {
 	d := gtk.MessageDialogNew(parent, gtk.DIALOG_MODAL, gtk.MESSAGE_OTHER, gtk.BUTTONS_OK_CANCEL, "%s", title)
-	
+
 	content, _ := d.GetContentArea()
 	entry, _ := gtk.EntryNew()
 	entry.SetText(defaultText)
 	entry.SetMarginStart(10)
 	entry.SetMarginEnd(10)
 	entry.Connect("activate", func() { d.Response(gtk.RESPONSE_OK) })
-	
+
 	content.Add(entry)
 	content.ShowAll()
 

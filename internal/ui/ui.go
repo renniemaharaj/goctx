@@ -38,6 +38,7 @@ var (
 	mainTreeView       *gtk.TreeView
 	tokenScale         *gtk.Scale
 	smartCheck         *gtk.CheckButton
+	header             *gtk.HeaderBar
 )
 
 func Run() {
@@ -47,7 +48,7 @@ func Run() {
 	win.Connect("destroy", gtk.MainQuit)
 
 	// --- HeaderBar (Toolbar with Close Button) ---
-	header, _ := gtk.HeaderBarNew()
+	header, _ = gtk.HeaderBarNew()
 	header.SetShowCloseButton(true)
 	header.SetTitle("GoCtx Manager")
 	header.SetSubtitle("Stash-Apply-Commit Workflow")
@@ -59,6 +60,7 @@ func Run() {
 	btnApplyPatch = createToolBtn("document-save-symbolic", "Apply selected pending patch")
 	btnApplyCommit = createToolBtn("edit-undo-symbolic", "Restore workspace to this commit's state")
 	btnCommit = createToolBtn("emblem-ok-symbolic", "Commit all changes to git")
+	btnKeys := createToolBtn("preferences-desktop-remote-symbolic", "Manage Gemini API Keys")
 
 	btnApplyPatch.SetSensitive(false)
 	btnApplyCommit.SetSensitive(false)
@@ -69,6 +71,7 @@ func Run() {
 	header.PackStart(btnApplyPatch)
 	header.PackStart(btnApplyCommit)
 	header.PackEnd(btnCommit)
+	header.PackEnd(btnKeys)
 
 	// --- Layout: Resizable Panes ---
 	// Root Paned: [ Sidebar (Left) | Diff View (Right) ]
@@ -188,10 +191,15 @@ func Run() {
 	statusLabel.SetMarginBottom(5)
 	statusPanel.PackStart(statusLabel, false, false, 0)
 
+	// Overlay for Floating Chat
+	overlay, _ := gtk.OverlayNew()
 	vmain, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	vmain.PackStart(hPaned, true, true, 0)
 	vmain.PackStart(statusPanel, false, false, 0)
-	win.Add(vmain)
+
+	overlay.Add(vmain)
+	setupChatInterface(overlay)
+	win.Add(overlay)
 
 	// --- Logic ---
 	btnBuild.Connect("clicked", func() {
@@ -212,6 +220,10 @@ func Run() {
 				})
 			}
 		}()
+	})
+
+	btnKeys.Connect("clicked", func() {
+		showKeyManager()
 	})
 
 	btnCopy.Connect("clicked", func() {
@@ -306,26 +318,20 @@ func Run() {
 
 		shouldProceed := false
 		if isDirty {
-			// Present the 3-way choice: Stash & Apply, Apply Directly, or Cancel
 			choice := askStashOrApply(win)
 			if choice == 1 {
-				// User chose Stash & Apply
 				exec.Command("git", "stash", "push", "-m", "GoCtx: Pre-patch stash").Run()
 				shouldProceed = true
 			} else if choice == 0 {
-				// User chose Apply Directly
 				shouldProceed = true
 			}
-			// If choice is -1 (Cancel), shouldProceed remains false
 		} else {
-			// Clean workspace, just standard confirmation
 			shouldProceed = confirmAction(win, "Apply selected patch?")
 		}
 
 		if shouldProceed {
 			err := apply.ApplyPatch(".", patchToApply)
 
-			// helper to clean up the UI after a successful (or forced) apply
 			appliedFunc := func() {
 				pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
 				pendingPanel.List.Remove(row)
@@ -338,15 +344,12 @@ func Run() {
 			if err == nil {
 				appliedFunc()
 			} else if strings.Contains(err.Error(), "PATCH_ERROR") {
-				// Hard failure: Hunk mismatch or FS error (no stash created by apply.go)
 				updateStatus(statusLabel, "Patch failed to apply")
 				RenderError(err)
 			} else {
-				// Verification failed (Build/Test). ApplyPatch stashed the failing changes.
 				RenderError(err)
 				confirmMsg := "Verification failed (Build/Test). Changes were stashed. Pop stash to keep them anyway?"
 				if confirmAction(win, confirmMsg) {
-					// Restore the stashed changes that caused the build failure
 					exec.Command("git", "stash", "pop").Run()
 					appliedFunc()
 					updateStatus(statusLabel, "Patch integrated (verification ignored)")
@@ -370,7 +373,6 @@ func Run() {
 			pathRaw, _ := pathVal.GoValue()
 			pathStr := pathRaw.(string)
 
-			// Atomic update of the current editing path
 			pathMu.Lock()
 			currentEditingPath = pathStr
 			pathMu.Unlock()
@@ -417,7 +419,7 @@ func Run() {
 
 func showDetailedError(title, msg string) {
 	dialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", title)
-	dialog.FormatSecondaryText("%s", msg)
+	dialog.FormatSecondaryText("%s", truncate(msg, 100))
 	dialog.Run()
 	dialog.Destroy()
 }
