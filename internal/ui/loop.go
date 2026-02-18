@@ -26,10 +26,17 @@ func backgroundMonitoringLoop() {
 
 	// Periodic Workspace Status Refresh (Every 5s)
 	go func() {
+		// Use a lock-based guard to prevent overlapping refreshes if Git is slow
+		var running bool
 		for {
 			time.Sleep(5 * time.Second)
+			if running {
+				continue
+			}
+			running = true
 			glib.IdleAdd(func() {
 				refreshGitState()
+				running = false
 			})
 		}
 	}()

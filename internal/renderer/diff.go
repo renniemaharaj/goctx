@@ -19,11 +19,11 @@ func (r *Renderer) RenderDiff(p model.ProjectOutput, title string) {
 	r.statsBuf.SetText("")
 	r.statsBuf.InsertWithTag(r.statsBuf.GetEndIter(), fmt.Sprintf("=== %s ===\n\n", strings.ToUpper(title)), r.GetTag("header"))
 
-	if p.ProjectTree != "" {
-		r.statsBuf.Insert(r.statsBuf.GetEndIter(), "PROJECT STRUCTURE:\n")
-		r.statsBuf.Insert(r.statsBuf.GetEndIter(), p.ProjectTree+"\n")
-		r.statsBuf.Insert(r.statsBuf.GetEndIter(), "---\n\n")
-	}
+	// if p.ProjectTree != "" {
+	// 	r.statsBuf.Insert(r.statsBuf.GetEndIter(), "PROJECT STRUCTURE:\n")
+	// 	r.statsBuf.Insert(r.statsBuf.GetEndIter(), p.ProjectTree+"\n")
+	// 	r.statsBuf.Insert(r.statsBuf.GetEndIter(), "---\n\n")
+	// }
 
 	dmp := diffmatchpatch.New()
 	var keys []string
@@ -32,7 +32,10 @@ func (r *Renderer) RenderDiff(p model.ProjectOutput, title string) {
 	}
 	sort.Strings(keys)
 
-	for _, path := range keys {
+	for i, path := range keys {
+		if i >= 20 {
+			continue
+		}
 		content := p.Files[path]
 		if !utf8.ValidString(content) {
 			continue

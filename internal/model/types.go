@@ -12,8 +12,10 @@ type Config struct {
 }
 
 type ProjectOutput struct {
-	// InstructionHeader string            `json:"instruction_header,omitempty"`
 	ShortDescription string            `json:"short_description,omitempty"`
 	ProjectTree      string            `json:"project_tree"`
 	Files            map[string]string `json:"files"`
+	FileCount        int               `json:"file_count"`
+	TokenCount       int               `json:"token_count"`
+	DirCount         int               `json:"dir_count"`
 }

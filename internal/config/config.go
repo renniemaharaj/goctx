@@ -8,9 +8,13 @@ import (
 )
 
 const (
-	OverlayOpacity25 = 0.25
-	OverlayOpacity50 = 0.50
-	OverlayOpacity75 = 0.75
+	// MaxTraversalDepth limits how deep the scanner will go into subdirectories.
+	MaxTraversalDepth = 5
+	// MaxFileCount prevents the context from becoming too large for the LLM window.
+	MaxFileCount      = 100
+	OverlayOpacity25  = 0.25
+	OverlayOpacity50  = 0.50
+	OverlayOpacity75  = 0.75
 	OverlayOpacity100 = 1.00
 )
 

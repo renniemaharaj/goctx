@@ -2,12 +2,22 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
+func isRepo(root string) bool {
+	_, err := os.Stat(filepath.Join(root, ".git"))
+	return err == nil
+}
+
 // IsDirty checks if the workspace has uncommitted changes
 func IsDirty(root string) bool {
+	if !isRepo(root) {
+		return false
+	}
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = root
 	out, _ := cmd.Output()
@@ -16,6 +26,9 @@ func IsDirty(root string) bool {
 
 // GetStatusFiles returns paths of modified/added files in the workspace
 func GetStatusFiles(root string) ([]string, error) {
+	if !isRepo(root) {
+		return nil, nil
+	}
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = root
 	out, err := cmd.Output()
