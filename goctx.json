@@ -1,22 +1,9 @@
 {
-  "ignore": [
-    ".git",
-    ".stashes",
-    "goctx",
-    "goctx.png",
-    ".ctxignore"
-  ],
-  "extensions": [
-    ".go",
-    ".mod",
-    ".md",
-    ".json"
-  ],
+  "ignore": [".git", ".stashes", "goctx", "goctx.png", ".ctxignore"],
+  "extensions": [".go", ".mod", ".md", ".json"],
   "scripts": {
-    "test": "go test .",
+    "test": "go test ./...",
     "build": "go build -o goctx ."
   },
-  "gemini_keys": [
-    "AIzaSyCvWQrp_v0CgH-xFdWHLFPIwyMFFKUhbBk"
-  ]
+  "gemini_keys": ["AIzaSyCvWQrp_v0CgH-xFdWHLFPIwyMFFKUhbBk"]
 }

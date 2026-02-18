@@ -41,18 +41,19 @@ func ApplyPatch(root string, input model.ProjectOutput, onProgress ProgressFunc)
 			continue
 		}
 
-		os.MkdirAll(filepath.Join(root, filepath.Dir(path)), 0755)
+		targetPath := filepath.Join(root, path)
+		os.MkdirAll(filepath.Dir(targetPath), 0755)
 
 		var applyErr error
 		if strings.Contains(content, "<<<<<< SEARCH") && strings.Contains(content, ">>>>>> REPLACE") {
 			hunks := patch.ParseHunks(content)
 			if len(hunks) > 0 {
-				applyErr = applySurgicalEdit(filepath.Join(root, path), hunks)
+				applyErr = applySurgicalEdit(targetPath, hunks)
 			} else {
 				applyErr = fmt.Errorf("surgical markers found but failed to parse hunks in %s", path)
 			}
 		} else {
-			applyErr = os.WriteFile(filepath.Join(root, path), []byte(content), 0644)
+			applyErr = os.WriteFile(targetPath, []byte(content), 0644)
 		}
 
 		if applyErr != nil {
