@@ -6,22 +6,16 @@ import (
 )
 
 func TestParseHunksBasic(t *testing.T) {
-	content := `<<<<<< SEARCH
-old line 1
-old line 2
-======
-new line 1
-new line 2
->>>>>> REPLACE`
+	content := "<<<<<< SEARCH\nold line 1\nold line 2\n======\nnew line 1\nnew line 2\n>>>>>> REPLACE"
 	hunks := ParseHunks(content)
 	if len(hunks) != 1 {
 		t.Errorf("expected 1 hunk, got %d", len(hunks))
 	}
 	if hunks[0].Search != "old line 1\nold line 2" {
-		t.Errorf("unexpected Search content: %s", hunks[0].Search)
+		t.Errorf("unexpected Search content:\n%q", hunks[0].Search)
 	}
 	if hunks[0].Replace != "new line 1\nnew line 2" {
-		t.Errorf("unexpected Replace content: %s", hunks[0].Replace)
+		t.Errorf("unexpected Replace content:\n%q", hunks[0].Replace)
 	}
 }
 
@@ -66,7 +60,7 @@ func TestParseHunksMultiple(t *testing.T) {
 		t.Errorf("expected 2 hunks, got %d", len(hunks))
 	}
 	if hunks[1].Replace != "new2" {
-		t.Errorf("unexpected second hunk Replace: %s", hunks[1].Replace)
+		t.Errorf("unexpected second hunk Replace: %q", hunks[1].Replace)
 	}
 }
 

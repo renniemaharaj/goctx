@@ -33,6 +33,8 @@ var (
 	btnApplyPatch      *gtk.Button
 	btnApplyCommit     *gtk.Button
 	btnCommit          *gtk.Button
+	btnRunBuild        *gtk.Button
+	btnRunTest         *gtk.Button
 	lastHistoryCount   int
 	isLoading          bool
 	isRefreshing       bool
@@ -43,8 +45,20 @@ var (
 	header             *gtk.HeaderBar
 )
 
+func setupCSS() {
+	css, _ := gtk.CssProviderNew()
+	css.LoadFromData(`
+		.btn-success { background-image: none; background-color: #28a745; color: white; text-shadow: none; }
+		.btn-failure { background-image: none; background-color: #dc3545; color: white; text-shadow: none; }
+		.btn-neutral { background-image: none; }
+	`)
+	screen, _ := gdk.ScreenGetDefault()
+	gtk.AddProviderForScreen(screen, css, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+}
+
 func Run() {
 	gtk.Init(nil)
+	setupCSS()
 	win, _ = gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	win.SetDefaultSize(1400, 950)
 	win.Connect("destroy", gtk.MainQuit)
@@ -63,6 +77,8 @@ func Run() {
 	btnApplyCommit = createToolBtn("edit-undo-symbolic", "Restore workspace to this commit's state")
 	btnCommit = createToolBtn("emblem-ok-symbolic", "Commit all changes to git")
 	btnKeys := createToolBtn("dialog-password-symbolic", "Manage Gemini API Keys")
+	btnRunBuild = createToolBtn("system-run-symbolic", "Run Build Command")
+	btnRunTest = createToolBtn("media-playback-start-symbolic", "Run Test Command")
 
 	btnApplyPatch.SetSensitive(false)
 	btnApplyCommit.SetSensitive(false)
@@ -76,6 +92,8 @@ func Run() {
 	// Right Side (Packed Right-to-Left): Config -> Commit -> Apply Patch
 	header.PackEnd(btnKeys)
 	header.PackEnd(btnCommit)
+	header.PackEnd(btnRunTest)
+	header.PackEnd(btnRunBuild)
 	header.PackEnd(btnApplyPatch)
 
 	// --- Layout: Resizable Panes ---
@@ -229,6 +247,14 @@ func Run() {
 
 	btnKeys.Connect("clicked", func() {
 		showKeyManager()
+	})
+
+	btnRunBuild.Connect("clicked", func() {
+		go runVerification("build", true)
+	})
+
+	btnRunTest.Connect("clicked", func() {
+		go runVerification("test", true)
 	})
 
 	btnCopy.Connect("clicked", func() {
