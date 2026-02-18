@@ -1,4 +1,3 @@
-````markdown
 # GoCtx: High-Integrity Context & Patch Orchestrator
 
 ![GoCtx Dashboard](goctx.png)
@@ -25,7 +24,6 @@ cd goctx
 go build .
 sudo mv goctx /bin/goctx
 ```
-````
 
 ## Usage Workflow
 
@@ -69,7 +67,3 @@ Define verification scripts in your project root to enable automated safety chec
 
 - Go 1.25+
 - GTK3 development headers (e.g., `libgtk-3-dev` on Ubuntu/Debian)
-
-```
-
-```
