@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"goctx/internal/config"
 	"goctx/internal/git"
+	"goctx/internal/renderer"
 	"goctx/internal/runner"
 	"strings"
 	"time"
@@ -32,15 +33,6 @@ func backgroundMonitoringLoop() {
 			})
 		}
 	}()
-
-	// Periodic Build/Test Verification Loop (Every 30s)
-	go func() {
-		for {
-			runVerification("build", false)
-			runVerification("test", false)
-			time.Sleep(30 * time.Second)
-		}
-	}()
 }
 
 func refreshGitState() {
@@ -57,7 +49,7 @@ func refreshGitState() {
 	}
 }
 
-func runVerification(mode string, verbose bool) {
+func runVerification(mode string, verbose bool, r *renderer.Renderer) {
 	cfg, _ := config.Load(".")
 	var cmd string
 	var btn *gtk.Button
@@ -78,7 +70,7 @@ func runVerification(mode string, verbose bool) {
 		glib.IdleAdd(func() {
 			isLoading = true
 			statsBuf.SetText("")
-			statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("=== MANUAL %s STARTING ===\n", strings.ToUpper(mode)), getTag("header"))
+			statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("=== MANUAL %s STARTING ===\n", strings.ToUpper(mode)), r.GetTag("header"))
 			updateStatus(statusLabel, "Running "+mode+"...")
 		})
 	}
@@ -104,7 +96,7 @@ func runVerification(mode string, verbose bool) {
 			ctx.AddClass("btn-failure")
 			btn.SetTooltipText(fmt.Sprintf("Last %s failed: %v", mode, err))
 			if verbose {
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("\nFAILED: %v\n", err), getTag("deleted"))
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("\nFAILED: %v\n", err), r.GetTag("deleted"))
 				updateStatus(statusLabel, mode+" failed")
 			}
 		} else {
@@ -112,7 +104,7 @@ func runVerification(mode string, verbose bool) {
 			btn.SetTooltipText(fmt.Sprintf("Last %s passed", mode))
 			if verbose {
 				successMsg := fmt.Sprintf("\nSUCCESS: %s completed successfully.\n", strings.ToUpper(mode))
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), successMsg, getTag("added"))
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), successMsg, r.GetTag("added"))
 				updateStatus(statusLabel, mode+" passed")
 			}
 		}
@@ -122,7 +114,7 @@ func runVerification(mode string, verbose bool) {
 		} else if err != nil && !isLoading {
 			// If background check failed and the user is not currently looking at something else
 			updateStatus(statusLabel, fmt.Sprintf("Background %s failed", mode))
-			RenderError(fmt.Errorf("%s output:\n%s", mode, string(out)))
+			r.RenderError(fmt.Errorf("%s output:\n%s", mode, string(out)))
 		}
 	})
 }

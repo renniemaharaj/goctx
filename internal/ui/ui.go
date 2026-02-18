@@ -6,6 +6,7 @@ import (
 	"goctx/internal/builder"
 	"goctx/internal/git"
 	"goctx/internal/model"
+	"goctx/internal/renderer"
 	"os"
 	"os/exec"
 	"strings"
@@ -155,7 +156,8 @@ func Run() {
 	statsView.SetLeftMargin(15)
 	statsView.SetTopMargin(15)
 	statsBuf, _ = statsView.GetBuffer()
-	setupTags(statsBuf)
+	renderStruct := renderer.NewRenderer(statsBuf, isLoading, statusLabel, updateStatus)
+	renderer.SetupTags(statsBuf)
 
 	// Live Ignore Auto-save with Debounce and Path-Locking
 	statsBuf.Connect("changed", func() {
@@ -238,7 +240,7 @@ func Run() {
 					currentEditingPath = ""
 					pathMu.Unlock()
 					statsView.SetEditable(false)
-					renderDiff(activeContext, "Current Workspace State")
+					renderStruct.RenderDiff(activeContext, "Current Workspace State")
 					updateStatus(statusLabel, "Context built successfully")
 				})
 			}
@@ -250,11 +252,11 @@ func Run() {
 	})
 
 	btnRunBuild.Connect("clicked", func() {
-		go runVerification("build", true)
+		go runVerification("build", true, renderStruct)
 	})
 
 	btnRunTest.Connect("clicked", func() {
-		go runVerification("test", true)
+		go runVerification("test", true, renderStruct)
 	})
 
 	btnCopy.Connect("clicked", func() {
@@ -276,7 +278,7 @@ func Run() {
 		statsView.SetEditable(false)
 
 		idx := row.GetIndex()
-		renderDiff(pendingPatches[idx], "Pending Patch Preview")
+		renderStruct.RenderDiff(pendingPatches[idx], "Pending Patch Preview")
 		btnApplyPatch.SetSensitive(true)
 		btnApplyCommit.SetSensitive(false)
 	})
@@ -301,7 +303,7 @@ func Run() {
 
 				isLoading = true
 				statsBuf.SetText("")
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "COMMIT PREVIEW: "+hash+"\n\n", getTag("header"))
+				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "COMMIT PREVIEW: "+hash+"\n\n", renderStruct.GetTag("header"))
 				statsBuf.Insert(statsBuf.GetEndIter(), string(out))
 				isLoading = false
 
@@ -372,7 +374,7 @@ func Run() {
 						if phase != "" {
 							updateStatus(statusLabel, fmt.Sprintf("Phase: %s", phase))
 							header.SetSubtitle(fmt.Sprintf("%s: %s", phase, desc))
-							statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("\n--- %s ---\n", phase), getTag("header"))
+							statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("\n--- %s ---\n", phase), renderStruct.GetTag("header"))
 						}
 						if logLine != "" {
 							statsBuf.Insert(statsBuf.GetEndIter(), logLine+"\n")
@@ -394,16 +396,16 @@ func Run() {
 						clearAllSelections()
 						refreshHistory(historyPanel.List)
 						lastAppliedDesc = patchToApply.ShortDescription
-						RenderGitStatus(".")
+						renderStruct.RenderGitStatus(".")
 					}
 
 					if err == nil {
 						appliedFunc()
 					} else if strings.Contains(err.Error(), "PATCH_ERROR") {
 						updateStatus(statusLabel, "Patch failed to apply")
-						RenderError(err)
+						renderStruct.RenderError(err)
 					} else {
-						RenderError(err)
+						renderStruct.RenderError(err)
 						confirmMsg := "Verification failed (Build/Test). Changes were stashed. Pop stash to keep them anyway?"
 						if confirmAction(win, confirmMsg) {
 							exec.Command("git", "stash", "pop").Run()
@@ -442,7 +444,7 @@ func Run() {
 				statsView.SetEditable(false)
 			}
 
-			RenderFile(pathStr)
+			renderStruct.RenderFile(pathStr)
 			isLoading = false
 		}
 	})
