@@ -1,14 +1,9 @@
 package ui
 
 import (
-	"fmt"
-	"goctx/internal/apply"
-	"goctx/internal/builder"
-	"goctx/internal/git"
 	"goctx/internal/model"
 	"goctx/internal/renderer"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 
@@ -36,6 +31,9 @@ var (
 	btnCommit          *gtk.Button
 	btnRunBuild        *gtk.Button
 	btnRunTest         *gtk.Button
+	btnBuild           *gtk.Button
+	btnCopy            *gtk.Button
+	btnKeys            *gtk.Button
 	lastHistoryCount   int
 	isLoading          bool
 	isRefreshing       bool
@@ -60,49 +58,83 @@ func setupCSS() {
 func Run() {
 	gtk.Init(nil)
 	setupCSS()
+
 	win, _ = gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	win.SetDefaultSize(1400, 950)
 	win.Connect("destroy", gtk.MainQuit)
 
-	// --- HeaderBar (Toolbar with Close Button) ---
-	header, _ = gtk.HeaderBarNew()
-	header.SetShowCloseButton(true)
-	header.SetTitle("GoCtx Manager")
-	header.SetSubtitle("Stash-Apply-Commit Workflow")
+	header = createHeaderBar()
 	win.SetTitlebar(header)
 
-	// Toolbar Buttons
-	btnBuild := createToolBtn("document-open-symbolic", "Build current workspace context")
-	btnCopy := createToolBtn("edit-copy-symbolic", "Copy AI system prompt + context to clipboard")
+	hPaned := createMainLayout()
+
+	statusPanel, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+	statusLabel, _ = gtk.LabelNew("Ready")
+	statusLabel.SetMarginStart(10)
+	statusLabel.SetMarginBottom(5)
+	statusPanel.PackStart(statusLabel, false, false, 0)
+
+	vmain, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	vmain.PackStart(hPaned, true, true, 0)
+	vmain.PackStart(statusPanel, false, false, 0)
+
+	overlay, _ := gtk.OverlayNew()
+	overlay.Add(vmain)
+	setupChatInterface(overlay)
+
+	win.Add(overlay)
+
+	// Rendering logic init
+	renderStruct := renderer.NewRenderer(statsBuf, isLoading, statusLabel, updateStatus)
+	renderer.SetupTags(statsBuf)
+
+	bindEvents(renderStruct)
+	setupDebounceAutoSave()
+
+	backgroundMonitoringLoop()
+	refreshHistory(historyPanel.List)
+	lastHistoryCount = countCommits()
+
+	win.ShowAll()
+	gtk.Main()
+}
+
+func createHeaderBar() *gtk.HeaderBar {
+	hb, _ := gtk.HeaderBarNew()
+	hb.SetShowCloseButton(true)
+	hb.SetTitle("GoCtx Manager")
+	hb.SetSubtitle("Stash-Apply-Commit Workflow")
+
+	btnBuild = createToolBtn("document-open-symbolic", "Build current workspace context")
+	btnCopy = createToolBtn("edit-copy-symbolic", "Copy AI system prompt + context")
 	btnApplyPatch = createToolBtn("document-save-symbolic", "Apply selected pending patch")
-	btnApplyCommit = createToolBtn("edit-undo-symbolic", "Restore workspace to this commit's state")
-	btnCommit = createToolBtn("emblem-ok-symbolic", "Commit all changes to git")
-	btnKeys := createToolBtn("dialog-password-symbolic", "Manage Gemini API Keys")
-	btnRunBuild = createToolBtn("system-run-symbolic", "Run Build Command")
-	btnRunTest = createToolBtn("media-playback-start-symbolic", "Run Test Command")
+	btnApplyCommit = createToolBtn("edit-undo-symbolic", "Restore to this commit state")
+	btnCommit = createToolBtn("emblem-ok-symbolic", "Commit all changes")
+	btnKeys = createToolBtn("dialog-password-symbolic", "Manage API Keys")
+	btnRunBuild = createToolBtn("system-run-symbolic", "Run Build")
+	btnRunTest = createToolBtn("media-playback-start-symbolic", "Run Tests")
 
 	btnApplyPatch.SetSensitive(false)
 	btnApplyCommit.SetSensitive(false)
 	btnCommit.SetSensitive(false)
 
-	// Left Side: Preparation & History Utility
-	header.PackStart(btnBuild)
-	header.PackStart(btnCopy)
-	header.PackStart(btnApplyCommit)
+	hb.PackStart(btnBuild)
+	hb.PackStart(btnCopy)
+	hb.PackStart(btnApplyCommit)
 
-	// Right Side (Packed Right-to-Left): Config -> Commit -> Apply Patch
-	header.PackEnd(btnKeys)
-	header.PackEnd(btnCommit)
-	header.PackEnd(btnRunTest)
-	header.PackEnd(btnRunBuild)
-	header.PackEnd(btnApplyPatch)
+	hb.PackEnd(btnKeys)
+	hb.PackEnd(btnCommit)
+	hb.PackEnd(btnRunTest)
+	hb.PackEnd(btnRunBuild)
+	hb.PackEnd(btnApplyPatch)
 
-	// --- Layout: Resizable Panes ---
-	// Root Paned: [ Sidebar (Left) | Diff View (Right) ]
+	return hb
+}
+
+func createMainLayout() *gtk.Paned {
 	hPaned, _ := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
 	hPaned.SetPosition(350)
 
-	// Nested Resizable Sidebar: [ Pending | [ History | Explorer ] ]
 	pendingPanel = NewActionPanel("PENDING PATCHES", clearAllSelections)
 	historyPanel = NewActionPanel("COMMIT HISTORY", clearAllSelections)
 
@@ -111,29 +143,24 @@ func Run() {
 
 	vSidebarOuter.Pack1(pendingPanel.Container, true, false)
 	vSidebarOuter.Pack2(vSidebarInner, true, false)
-
 	vSidebarInner.Pack1(historyPanel.Container, true, false)
 
-	// Context Tree & Controls
 	contextTreeBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
 	label(contextTreeBox, "CONTEXT SELECTION")
 
-	// Token Budget Control
 	boxBudget, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	boxBudget.SetMarginStart(10)
 	boxBudget.SetMarginEnd(10)
 	lblBudget, _ := gtk.LabelNew("Token Budget")
 	lblBudget.SetXAlign(0)
 	tokenScale, _ = gtk.ScaleNewWithRange(gtk.ORIENTATION_HORIZONTAL, 1000, 128000, 1000)
-	tokenScale.SetValue(32000) // Default 32k
+	tokenScale.SetValue(32000)
 	tokenScale.SetDrawValue(true)
 	boxBudget.PackStart(lblBudget, false, false, 0)
 	boxBudget.PackStart(tokenScale, false, false, 0)
 	contextTreeBox.PackStart(boxBudget, false, false, 5)
 
-	// Smart Context Checkbox
 	smartCheck, _ = gtk.CheckButtonNewWithLabel("Smart Context (LSP Aware)")
-	smartCheck.SetTooltipText("Uses local Go tools to find related symbol definitions automatically")
 	smartCheck.SetMarginStart(10)
 	contextTreeBox.PackStart(smartCheck, false, false, 5)
 
@@ -143,12 +170,9 @@ func Run() {
 	contextTreeBox.PackStart(treeScroll, true, true, 0)
 
 	vSidebarInner.Pack2(contextTreeBox, true, false)
-
 	vSidebarOuter.SetPosition(250)
 	vSidebarInner.SetPosition(250)
 
-	// Content Area
-	rightStack, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	statsScroll, _ := gtk.ScrolledWindowNew(nil, nil)
 	statsView, _ = gtk.TextViewNew()
 	statsView.SetMonospace(true)
@@ -156,10 +180,15 @@ func Run() {
 	statsView.SetLeftMargin(15)
 	statsView.SetTopMargin(15)
 	statsBuf, _ = statsView.GetBuffer()
-	renderStruct := renderer.NewRenderer(statsBuf, isLoading, statusLabel, updateStatus)
-	renderer.SetupTags(statsBuf)
+	statsScroll.Add(statsView)
 
-	// Live Ignore Auto-save with Debounce and Path-Locking
+	hPaned.Pack1(vSidebarOuter, false, false)
+	hPaned.Pack2(statsScroll, true, false)
+
+	return hPaned
+}
+
+func setupDebounceAutoSave() {
 	statsBuf.Connect("changed", func() {
 		if isLoading || !statsView.GetEditable() {
 			return
@@ -182,16 +211,12 @@ func Run() {
 			activePath := currentEditingPath
 			pathMu.RUnlock()
 
-			// Ensure we are still looking at the same file that triggered the save
 			if activePath != frozenPath {
 				return false
 			}
 
 			text, _ := statsBuf.GetText(statsBuf.GetStartIter(), statsBuf.GetEndIter(), false)
-			err := os.WriteFile(activePath, []byte(text), 0644)
-			if err != nil {
-				updateStatus(statusLabel, "Error saving: "+err.Error())
-			}
+			_ = os.WriteFile(activePath, []byte(text), 0644)
 
 			isRefreshing = true
 			refreshTreeData(treeStore)
@@ -202,279 +227,6 @@ func Run() {
 			return false
 		})
 	})
-
-	statsScroll.Add(statsView)
-	rightStack.PackStart(statsScroll, true, true, 0)
-
-	hPaned.Pack1(vSidebarOuter, false, false)
-	hPaned.Pack2(rightStack, true, false)
-
-	// Status Bar
-	statusPanel, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	statusLabel, _ = gtk.LabelNew("Ready")
-	statusLabel.SetMarginStart(10)
-	statusLabel.SetMarginBottom(5)
-	statusPanel.PackStart(statusLabel, false, false, 0)
-
-	// Overlay for Floating Chat
-	overlay, _ := gtk.OverlayNew()
-	vmain, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	vmain.PackStart(hPaned, true, true, 0)
-	vmain.PackStart(statusPanel, false, false, 0)
-
-	overlay.Add(vmain)
-	setupChatInterface(overlay)
-	win.Add(overlay)
-
-	// --- Logic ---
-	btnBuild.Connect("clicked", func() {
-		limit := int(tokenScale.GetValue())
-		smart := smartCheck.GetActive()
-		go func() {
-			selected := getCheckedFiles(treeStore)
-			out, err := builder.BuildSelectiveContext(".", "Manual Build", selected, limit, smart)
-			if err == nil {
-				activeContext = out
-				glib.IdleAdd(func() {
-					pathMu.Lock()
-					currentEditingPath = ""
-					pathMu.Unlock()
-					statsView.SetEditable(false)
-					renderStruct.RenderDiff(activeContext, "Current Workspace State")
-					updateStatus(statusLabel, "Context built successfully")
-				})
-			}
-		}()
-	})
-
-	btnKeys.Connect("clicked", func() {
-		showKeyManager()
-	})
-
-	btnRunBuild.Connect("clicked", func() {
-		go runVerification("build", true, renderStruct)
-	})
-
-	btnRunTest.Connect("clicked", func() {
-		go runVerification("test", true, renderStruct)
-	})
-
-	btnCopy.Connect("clicked", func() {
-		fullPrompt := builder.AI_PROMPT_HEADER + string(mustMarshal(activeContext))
-		clip, _ := gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD)
-		clip.SetText(fullPrompt)
-		updateStatus(statusLabel, "System Prompt + Context copied")
-	})
-
-	pendingPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
-		if row == nil {
-			return
-		}
-		historyPanel.List.UnselectAll()
-
-		pathMu.Lock()
-		currentEditingPath = ""
-		pathMu.Unlock()
-		statsView.SetEditable(false)
-
-		idx := row.GetIndex()
-		renderStruct.RenderDiff(pendingPatches[idx], "Pending Patch Preview")
-		btnApplyPatch.SetSensitive(true)
-		btnApplyCommit.SetSensitive(false)
-	})
-
-	historyPanel.List.Connect("row-selected", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
-		if row != nil {
-			pendingPanel.List.UnselectAll()
-
-			pathMu.Lock()
-			currentEditingPath = ""
-			pathMu.Unlock()
-			statsView.SetEditable(false)
-
-			lblWidget, _ := row.GetChild()
-			lbl, _ := lblWidget.(*gtk.Label)
-			fullText, _ := lbl.GetText()
-			parts := strings.Fields(fullText)
-			if len(parts) > 0 {
-				hash := parts[0]
-				showCmd := exec.Command("git", "show", "--color=never", hash)
-				out, _ := showCmd.Output()
-
-				isLoading = true
-				statsBuf.SetText("")
-				statsBuf.InsertWithTag(statsBuf.GetEndIter(), "COMMIT PREVIEW: "+hash+"\n\n", renderStruct.GetTag("header"))
-				statsBuf.Insert(statsBuf.GetEndIter(), string(out))
-				isLoading = false
-
-				btnApplyCommit.SetSensitive(true)
-				btnApplyPatch.SetSensitive(false)
-			}
-		}
-	})
-
-	btnApplyCommit.Connect("clicked", func() {
-		row := historyPanel.List.GetSelectedRow()
-		if row == nil {
-			return
-		}
-		lblWidget, _ := row.GetChild()
-		lbl, _ := lblWidget.(*gtk.Label)
-		fullText, _ := lbl.GetText()
-		parts := strings.Fields(fullText)
-		if len(parts) > 0 {
-			hash := parts[0]
-			if confirmAction(win, "Restoring "+hash+" will overwrite current changes. Proceed?") {
-				cmd := exec.Command("git", "checkout", hash, "--", ".")
-				if err := cmd.Run(); err != nil {
-					updateStatus(statusLabel, "Error: "+err.Error())
-				} else {
-					updateStatus(statusLabel, "Restored "+hash)
-					refreshHistory(historyPanel.List)
-				}
-			}
-		}
-	})
-
-	btnApplyPatch.Connect("clicked", func() {
-		row := pendingPanel.List.GetSelectedRow()
-		if row == nil {
-			return
-		}
-
-		idx := row.GetIndex()
-		patchToApply := pendingPatches[idx]
-
-		// Check if workspace is dirty
-		stat, _ := exec.Command("git", "status", "--porcelain").Output()
-		isDirty := len(strings.TrimSpace(string(stat))) > 0
-
-		shouldProceed := false
-		if isDirty {
-			choice := askStashOrApply(win)
-			if choice == 1 {
-				exec.Command("git", "stash", "push", "-m", "GoCtx: Pre-patch stash").Run()
-				shouldProceed = true
-			} else if choice == 0 {
-				shouldProceed = true
-			}
-		} else {
-			shouldProceed = confirmAction(win, "Apply selected patch?")
-		}
-
-		if shouldProceed {
-			statsBuf.SetText("")
-			isLoading = true
-			header.SetSubtitle("Applying Patch...")
-
-			go func() {
-				// The anonymous function here acts as the ProgressFunc
-				err := apply.ApplyPatch(".", patchToApply, func(phase, desc, logLine string) {
-					glib.IdleAdd(func() {
-						if phase != "" {
-							updateStatus(statusLabel, fmt.Sprintf("Phase: %s", phase))
-							header.SetSubtitle(fmt.Sprintf("%s: %s", phase, desc))
-							statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("\n--- %s ---\n", phase), renderStruct.GetTag("header"))
-						}
-						if logLine != "" {
-							statsBuf.Insert(statsBuf.GetEndIter(), logLine+"\n")
-							// Auto-scroll to bottom of the logs
-							mark := statsBuf.CreateMark("bottom", statsBuf.GetEndIter(), false)
-							statsView.ScrollToMark(mark, 0.0, true, 0.0, 1.0)
-						}
-					})
-				})
-
-				glib.IdleAdd(func() {
-					isLoading = false
-					header.SetSubtitle("Stash-Apply-Commit Workflow")
-
-					appliedFunc := func() {
-						pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
-						pendingPanel.List.Remove(row)
-						updateStatus(statusLabel, "Patch applied and verified")
-						clearAllSelections()
-						refreshHistory(historyPanel.List)
-						lastAppliedDesc = patchToApply.ShortDescription
-						renderStruct.RenderGitStatus(".")
-					}
-
-					if err == nil {
-						appliedFunc()
-					} else if strings.Contains(err.Error(), "PATCH_ERROR") {
-						updateStatus(statusLabel, "Patch failed to apply")
-						renderStruct.RenderError(err)
-					} else {
-						renderStruct.RenderError(err)
-						confirmMsg := "Verification failed (Build/Test). Changes were stashed. Pop stash to keep them anyway?"
-						if confirmAction(win, confirmMsg) {
-							exec.Command("git", "stash", "pop").Run()
-							appliedFunc()
-							updateStatus(statusLabel, "Patch integrated (verification ignored)")
-						} else {
-							updateStatus(statusLabel, "Verification failed (changes stashed)")
-						}
-					}
-				})
-			}()
-		}
-	})
-
-	mainTreeView.Connect("cursor-changed", func() {
-		if isRefreshing {
-			return
-		}
-		selection, _ := mainTreeView.GetSelection()
-		_, iter, ok := selection.GetSelected()
-		if ok {
-			pendingPanel.List.UnselectAll()
-			historyPanel.List.UnselectAll()
-			pathVal, _ := treeStore.GetValue(iter, 2)
-			pathRaw, _ := pathVal.GoValue()
-			pathStr := pathRaw.(string)
-
-			pathMu.Lock()
-			currentEditingPath = pathStr
-			pathMu.Unlock()
-
-			isLoading = true
-			if strings.HasSuffix(pathStr, ".ctxignore") {
-				statsView.SetEditable(true)
-			} else {
-				statsView.SetEditable(false)
-			}
-
-			renderStruct.RenderFile(pathStr)
-			isLoading = false
-		}
-	})
-
-	btnCommit.Connect("clicked", func() {
-		defaultMsg := lastAppliedDesc
-		if defaultMsg == "" {
-			defaultMsg = "Commit Msg"
-		}
-
-		msg, ok := askForString(win, "Commit Message", defaultMsg)
-		if !ok || strings.TrimSpace(msg) == "" {
-			return
-		}
-
-		git.AddAll(".")
-		if err := git.Commit(".", msg); err != nil {
-			updateStatus(statusLabel, "Failed: "+err.Error())
-		} else {
-			updateStatus(statusLabel, "Committed")
-			refreshHistory(historyPanel.List)
-			lastAppliedDesc = ""
-		}
-	})
-
-	backgroundMonitoringLoop()
-	refreshHistory(historyPanel.List)
-	lastHistoryCount = countCommits()
-	win.ShowAll()
-	gtk.Main()
 }
 
 func showDetailedError(title, msg string) {
