@@ -69,3 +69,34 @@ func TestParseHunksMultiple(t *testing.T) {
 		t.Errorf("unexpected second hunk Replace: %s", hunks[1].Replace)
 	}
 }
+
+func TestApplyHunkIndentationMatch(t *testing.T) {
+	original := "func main() {\n    fmt.Println(\"hello\")\n}"
+	hunk := Hunk{
+		Search:  "    fmt.Println(\"hello\")",
+		Replace: "    log.Println(\"hello\")",
+	}
+	result, ok := ApplyHunk(original, hunk)
+	if !ok {
+		t.Fatal("Should match even with indentation")
+	}
+	if !strings.Contains(result, "log.Println") {
+		t.Error("Replacement failed")
+	}
+}
+
+func TestApplyHunkFirstOccurrenceOnly(t *testing.T) {
+	original := "item\nitem\nitem"
+	hunk := Hunk{
+		Search:  "item",
+		Replace: "modified",
+	}
+	result, ok := ApplyHunk(original, hunk)
+	if !ok {
+		t.Fatal("Apply failed")
+	}
+	count := strings.Count(result, "modified")
+	if count != 1 {
+		t.Errorf("Expected exactly 1 replacement, got %d", count)
+	}
+}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"goctx/internal/git"
 	"goctx/internal/model"
 	"goctx/internal/patch"
 	"os"
@@ -127,7 +128,7 @@ func RenderFile(path string) {
 	highlight(statsBuf, `//.*`, "comment")
 	highlight(statsBuf, `^#.*`, "comment") // Shell/Ignore comments
 	highlight(statsBuf, `/\*[^*]*\*+([^/*][^*]*\*+)*/`, "comment")
-	highlight(statsBuf, `".*?"`, "added") 
+	highlight(statsBuf, `".*?"`, "added")
 
 	if strings.HasSuffix(path, ".ctxignore") {
 		highlight(statsBuf, `^[^#\s]+`, "header") // Highlight ignore patterns
@@ -179,6 +180,34 @@ func getTag(n string) *gtk.TextTag {
 	}
 	tag, _ := tab.Lookup(n)
 	return tag
+}
+
+// RenderGitStatus shows a neat list of changed files in the main panel
+func RenderGitStatus(root string) {
+
+	files, err := git.GetStatusFiles(root)
+	if err != nil {
+		RenderError(err)
+		return
+	}
+
+	isLoading = true
+	defer func() { isLoading = false }()
+
+	statsBuf.SetText("")
+	statsBuf.InsertWithTag(statsBuf.GetEndIter(), "=== WORKSPACE MODIFICATIONS ===\n\n", getTag("header"))
+
+	if len(files) == 0 {
+		statsBuf.Insert(statsBuf.GetEndIter(), "No changes detected.\n")
+		return
+	}
+
+	for _, f := range files {
+		statsBuf.InsertWithTag(statsBuf.GetEndIter(), "  [Modified] ", getTag("added"))
+		statsBuf.Insert(statsBuf.GetEndIter(), f+"\n")
+	}
+
+	statsBuf.Insert(statsBuf.GetEndIter(), fmt.Sprintf("\nTotal modified: %d\n", len(files)))
 }
 
 // RenderError displays application or verification failures in the main panel

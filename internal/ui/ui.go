@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"goctx/internal/apply"
 	"goctx/internal/builder"
 	"goctx/internal/git"
@@ -334,33 +335,60 @@ func Run() {
 		}
 
 		if shouldProceed {
-			err := apply.ApplyPatch(".", patchToApply)
+			statsBuf.SetText("")
+			isLoading = true
+			header.SetSubtitle("Applying Patch...")
 
-			appliedFunc := func() {
-				pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
-				pendingPanel.List.Remove(row)
-				updateStatus(statusLabel, "Patch applied and verified")
-				clearAllSelections()
-				refreshHistory(historyPanel.List)
-				lastAppliedDesc = patchToApply.ShortDescription
-			}
+			go func() {
+				// The anonymous function here acts as the ProgressFunc
+				err := apply.ApplyPatch(".", patchToApply, func(phase, desc, logLine string) {
+					glib.IdleAdd(func() {
+						if phase != "" {
+							updateStatus(statusLabel, fmt.Sprintf("Phase: %s", phase))
+							header.SetSubtitle(fmt.Sprintf("%s: %s", phase, desc))
+							statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("\n--- %s ---\n", phase), getTag("header"))
+						}
+						if logLine != "" {
+							statsBuf.Insert(statsBuf.GetEndIter(), logLine+"\n")
+							// Auto-scroll to bottom of the logs
+							mark := statsBuf.CreateMark("bottom", statsBuf.GetEndIter(), false)
+							statsView.ScrollToMark(mark, 0.0, true, 0.0, 1.0)
+						}
+					})
+				})
 
-			if err == nil {
-				appliedFunc()
-			} else if strings.Contains(err.Error(), "PATCH_ERROR") {
-				updateStatus(statusLabel, "Patch failed to apply")
-				RenderError(err)
-			} else {
-				RenderError(err)
-				confirmMsg := "Verification failed (Build/Test). Changes were stashed. Pop stash to keep them anyway?"
-				if confirmAction(win, confirmMsg) {
-					exec.Command("git", "stash", "pop").Run()
-					appliedFunc()
-					updateStatus(statusLabel, "Patch integrated (verification ignored)")
-				} else {
-					updateStatus(statusLabel, "Verification failed (changes stashed)")
-				}
-			}
+				glib.IdleAdd(func() {
+					isLoading = false
+					header.SetSubtitle("Stash-Apply-Commit Workflow")
+
+					appliedFunc := func() {
+						pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
+						pendingPanel.List.Remove(row)
+						updateStatus(statusLabel, "Patch applied and verified")
+						clearAllSelections()
+						refreshHistory(historyPanel.List)
+						lastAppliedDesc = patchToApply.ShortDescription
+						RenderGitStatus(".")
+					}
+
+					if err == nil {
+						appliedFunc()
+					} else if strings.Contains(err.Error(), "PATCH_ERROR") {
+						updateStatus(statusLabel, "Patch failed to apply")
+						RenderError(err)
+					} else {
+						RenderError(err)
+						confirmMsg := "Verification failed (Build/Test). Changes were stashed. Pop stash to keep them anyway?"
+						if confirmAction(win, confirmMsg) {
+							exec.Command("git", "stash", "pop").Run()
+							appliedFunc()
+							updateStatus(statusLabel, "Patch integrated (verification ignored)")
+						} else {
+							updateStatus(statusLabel, "Verification failed (changes stashed)")
+						}
+					}
+				})
+			}()
 		}
 	})
 
@@ -396,7 +424,7 @@ func Run() {
 	btnCommit.Connect("clicked", func() {
 		defaultMsg := lastAppliedDesc
 		if defaultMsg == "" {
-			defaultMsg = "GoCtx: Manual Commit"
+			defaultMsg = "Commit Msg"
 		}
 
 		msg, ok := askForString(win, "Commit Message", defaultMsg)

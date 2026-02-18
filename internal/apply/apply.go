@@ -13,6 +13,8 @@ import (
 	"goctx/internal/stash"
 )
 
+type ProgressFunc func(phase, desc string, logLine string)
+
 func ApplyHunksToString(original string, hunks []patch.Hunk) (string, error) {
 	result := original
 	for _, h := range hunks {
@@ -25,9 +27,13 @@ func ApplyHunksToString(original string, hunks []patch.Hunk) (string, error) {
 	return result, nil
 }
 
-func ApplyPatch(root string, input model.ProjectOutput) error {
+func ApplyPatch(root string, input model.ProjectOutput, onProgress ProgressFunc) error {
 	if len(input.Files) == 0 {
 		return fmt.Errorf("no files to apply")
+	}
+
+	if onProgress != nil {
+		onProgress("Applying", "Modifying workspace files...", "")
 	}
 
 	for path, content := range input.Files {
@@ -35,20 +41,18 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 			continue
 		}
 
-		os.MkdirAll(filepath.Dir(path), 0755)
+		os.MkdirAll(filepath.Join(root, filepath.Dir(path)), 0755)
 
 		var applyErr error
-		// Only attempt surgical apply if the content contains the specific markers
 		if strings.Contains(content, "<<<<<< SEARCH") && strings.Contains(content, ">>>>>> REPLACE") {
 			hunks := patch.ParseHunks(content)
 			if len(hunks) > 0 {
-				applyErr = applySurgicalEdit(path, hunks)
+				applyErr = applySurgicalEdit(filepath.Join(root, path), hunks)
 			} else {
 				applyErr = fmt.Errorf("surgical markers found but failed to parse hunks in %s", path)
 			}
 		} else {
-			// Standard full file overwrite
-			applyErr = os.WriteFile(path, []byte(content), 0644)
+			applyErr = os.WriteFile(filepath.Join(root, path), []byte(content), 0644)
 		}
 
 		if applyErr != nil {
@@ -56,18 +60,31 @@ func ApplyPatch(root string, input model.ProjectOutput) error {
 		}
 	}
 
-	// Verification Phase: Run Build & Test scripts if configured
 	cfg, _ := config.Load(root)
 
 	if cfg.Scripts.Build != "" {
-		if out, err := runner.Run(root, cfg.Scripts.Build); err != nil {
+		if onProgress != nil {
+			onProgress("Building", fmt.Sprintf("Running: %s", cfg.Scripts.Build), "")
+		}
+		if out, err := runner.Run(root, cfg.Scripts.Build, func(line string) {
+			if onProgress != nil {
+				onProgress("Building", "", line)
+			}
+		}); err != nil {
 			stash.Push(root, fmt.Sprintf("Auto-stash: Build Failed - %s", input.ShortDescription))
 			return fmt.Errorf("BUILD_FAILURE: Verification failed for '%s'\n\nOutput:\n%s", cfg.Scripts.Build, string(out))
 		}
 	}
 
 	if cfg.Scripts.Test != "" {
-		if out, err := runner.Run(root, cfg.Scripts.Test); err != nil {
+		if onProgress != nil {
+			onProgress("Testing", fmt.Sprintf("Running: %s", cfg.Scripts.Test), "")
+		}
+		if out, err := runner.Run(root, cfg.Scripts.Test, func(line string) {
+			if onProgress != nil {
+				onProgress("Testing", "", line)
+			}
+		}); err != nil {
 			stash.Push(root, fmt.Sprintf("Auto-stash: Tests Failed - %s", input.ShortDescription))
 			return fmt.Errorf("TEST_FAILURE: Verification failed for '%s'\n\nOutput:\n%s", cfg.Scripts.Test, string(out))
 		}

@@ -14,6 +14,26 @@ func IsDirty(root string) bool {
 	return len(strings.TrimSpace(string(out))) > 0
 }
 
+// GetStatusFiles returns paths of modified/added files in the workspace
+func GetStatusFiles(root string) ([]string, error) {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		if len(line) > 3 {
+			// Porcelain format: XY path
+			files = append(files, strings.TrimSpace(line[3:]))
+		}
+	}
+	return files, nil
+}
+
 // StashPush saves changes to a stash
 func StashPush(root, message string) error {
 	cmd := exec.Command("git", "stash", "push", "-m", message)

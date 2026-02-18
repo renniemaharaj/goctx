@@ -29,7 +29,7 @@ func main() {
 }
 
 func runBuild() {
-	// CLI default: 128k context, no smart mode unless specified (simplification)
+	// CLI default: 128k context, no smart mode unless specified
 	output, _ := builder.BuildSelectiveContext(".", "Manual Build", nil, 128000, false)
 	json.NewEncoder(os.Stdout).Encode(output)
 }
@@ -51,6 +51,20 @@ func runApply() {
 		os.Exit(1)
 	}
 
-	apply.ApplyPatch(".", input)
-	fmt.Println("Patch applied successfully.")
+	// New: Progress tracking for CLI
+	err := apply.ApplyPatch(".", input, func(phase, desc, logLine string) {
+		if phase != "" {
+			fmt.Printf("\n[%s] %s\n", phase, desc)
+		}
+		if logLine != "" {
+			fmt.Printf("  %s\n", logLine)
+		}
+	})
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("\nPatch applied successfully.")
 }

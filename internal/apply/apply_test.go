@@ -111,3 +111,39 @@ func TestApplyHunksToString_MultiLine(t *testing.T) {
 		t.Errorf("expected:\n%q\ngot:\n%q", expected, result)
 	}
 }
+
+func TestApplyHunksToString_Sequential(t *testing.T) {
+	// Test that the output of one hunk can be the search target for the next
+	original := "start"
+	hunks := []patch.Hunk{
+		{Search: "start", Replace: "middle"},
+		{Search: "middle", Replace: "end"},
+	}
+
+	expected := "end"
+	result, err := ApplyHunksToString(original, hunks)
+	if err != nil {
+		t.Fatalf("Sequential apply failed: %v", err)
+	}
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestApplyHunksToString_Overlapping(t *testing.T) {
+	// Test that multiple hunks targeting different parts of the same file work
+	original := "line A\nline B\nline C"
+	hunks := []patch.Hunk{
+		{Search: "line A", Replace: "Alpha"},
+		{Search: "line C", Replace: "Gamma"},
+	}
+
+	expected := "Alpha\nline B\nGamma"
+	result, err := ApplyHunksToString(original, hunks)
+	if err != nil {
+		t.Fatalf("Overlapping apply failed: %v", err)
+	}
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
