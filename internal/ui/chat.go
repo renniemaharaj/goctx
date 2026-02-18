@@ -16,7 +16,7 @@ import (
 
 var aiManager *google.Manager
 
-func setupChatInterface(overlay *gtk.Overlay) {
+func chatComponent(overlay *gtk.Overlay) {
 	keys, _ := config.LoadKeys(".")
 	aiManager = google.NewManager(keys)
 

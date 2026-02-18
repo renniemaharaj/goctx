@@ -29,7 +29,7 @@ func bindEvents(r *renderer.Renderer) {
 					currentEditingPath = ""
 					pathMu.Unlock()
 					statsView.SetEditable(false)
-					r.RenderDiff(activeContext, "Current Workspace State")
+					r.RenderSummary(activeContext)
 					updateStatus(statusLabel, "Context built successfully")
 				})
 			}

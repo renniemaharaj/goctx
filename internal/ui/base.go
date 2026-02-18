@@ -61,6 +61,22 @@ func newBtn(l string) *gtk.Button {
 	return b
 }
 
+func showDetailedError(title, msg string) {
+	dialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", title)
+	dialog.FormatSecondaryText("%s", truncate(msg, 100))
+	dialog.Run()
+	dialog.Destroy()
+}
+
+func createToolBtn(iconName, tooltip string) *gtk.Button {
+	btn, _ := gtk.ButtonNew()
+	img, _ := gtk.ImageNewFromIconName(iconName, gtk.ICON_SIZE_BUTTON)
+	btn.SetImage(img)
+	btn.SetAlwaysShowImage(true)
+	btn.SetTooltipText(tooltip)
+	return btn
+}
+
 func label(box *gtk.Box, t string) {
 	l, _ := gtk.LabelNew(t)
 	l.SetXAlign(0)
