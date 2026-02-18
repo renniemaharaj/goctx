@@ -9,7 +9,7 @@ import (
 
 func setupDebounceAutoSave() {
 	statsBuf.Connect("changed", func() {
-		if isLoading || !statsView.GetEditable() {
+		if isLoadingState || !statsView.GetEditable() {
 			return
 		}
 

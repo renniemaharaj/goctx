@@ -37,10 +37,10 @@ func resetView() {
 	currentEditingPath = ""
 	pathMu.Unlock()
 
-	isLoading = true
+	isLoadingState = true
 	statsBuf.SetText("")
 	statsView.SetEditable(false)
-	isLoading = false
+	isLoadingState = false
 
 	updateStatus(statusLabel, "Selection cleared")
 }

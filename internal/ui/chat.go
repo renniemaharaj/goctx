@@ -46,7 +46,7 @@ func chatComponent(overlay *gtk.Overlay) {
 
 	chatEntry.Connect("activate", func() {
 		prompt, _ := chatEntry.GetText()
-		if prompt == "" || isLoading {
+		if prompt == "" || isLoadingState {
 			return
 		}
 

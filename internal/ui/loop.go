@@ -75,7 +75,7 @@ func runVerification(mode string, verbose bool, r *renderer.Renderer) {
 
 	if verbose {
 		glib.IdleAdd(func() {
-			isLoading = true
+			isLoadingState = true
 			statsBuf.SetText("")
 			statsBuf.InsertWithTag(statsBuf.GetEndIter(), fmt.Sprintf("=== MANUAL %s STARTING ===\n", strings.ToUpper(mode)), r.GetTag("header"))
 			updateStatus(statusLabel, "Running "+mode+"...")
@@ -117,8 +117,8 @@ func runVerification(mode string, verbose bool, r *renderer.Renderer) {
 		}
 
 		if verbose {
-			isLoading = false
-		} else if err != nil && !isLoading {
+			isLoadingState = false
+		} else if err != nil && !isLoadingState {
 			// If background check failed and the user is not currently looking at something else
 			updateStatus(statusLabel, fmt.Sprintf("Background %s failed", mode))
 			r.RenderError(fmt.Errorf("%s output:\n%s", mode, string(out)))

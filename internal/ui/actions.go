@@ -93,11 +93,11 @@ func bindEvents(r *renderer.Renderer) {
 			hash := parts[0]
 			showCmd := exec.Command("git", "show", "--color=never", hash)
 			out, _ := showCmd.Output()
-			isLoading = true
+			isLoadingState = true
 			statsBuf.SetText("")
 			statsBuf.InsertWithTag(statsBuf.GetEndIter(), "COMMIT PREVIEW: "+hash+"\n\n", r.GetTag("header"))
 			statsBuf.Insert(statsBuf.GetEndIter(), string(out))
-			isLoading = false
+			isLoadingState = false
 			btnApplyCommit.SetSensitive(true)
 			btnApplyPatch.SetSensitive(false)
 		}
@@ -118,10 +118,10 @@ func bindEvents(r *renderer.Renderer) {
 			pathMu.Lock()
 			currentEditingPath = pathStr
 			pathMu.Unlock()
-			isLoading = true
+			isLoadingState = true
 			statsView.SetEditable(strings.HasSuffix(pathStr, ".ctxignore"))
 			r.RenderFile(pathStr)
-			isLoading = false
+			isLoadingState = false
 		}
 	})
 }
@@ -195,7 +195,7 @@ func handleApplyPatchAction(r interface {
 	}
 	if shouldProceed {
 		statsBuf.SetText("")
-		isLoading = true
+		isLoadingState = true
 		header.SetSubtitle("Applying Patch...")
 		go func() {
 			err := apply.ApplyPatch(".", patchToApply, func(phase, desc, logLine string) {
@@ -213,7 +213,7 @@ func handleApplyPatchAction(r interface {
 				})
 			})
 			glib.IdleAdd(func() {
-				isLoading = false
+				isLoadingState = false
 				header.SetSubtitle("Stash-Apply-Commit Workflow")
 				if err == nil {
 					pendingPatches = append(pendingPatches[:idx], pendingPatches[idx+1:]...)
