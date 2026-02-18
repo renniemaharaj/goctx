@@ -1,8 +1,7 @@
 package ui
 
 import (
-	"os/exec"
-	"strings"
+	"goctx/internal/git"
 	"time"
 
 	"github.com/gotk3/gotk3/gdk"
@@ -31,9 +30,10 @@ func backgroundMonitoringLoop() {
 }
 
 func refreshGitState() {
-	if btnCommit == nil { return }
-	stat, _ := exec.Command("git", "status", "--porcelain").Output()
-	hasChanges := len(strings.TrimSpace(string(stat))) > 0
+	if btnCommit == nil {
+		return
+	}
+	hasChanges := git.IsDirty(".")
 	btnCommit.SetSensitive(hasChanges)
 
 	currentCount := countCommits()

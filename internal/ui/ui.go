@@ -3,6 +3,7 @@ package ui
 import (
 	"goctx/internal/apply"
 	"goctx/internal/builder"
+	"goctx/internal/git"
 	"goctx/internal/model"
 	"os"
 	"os/exec"
@@ -60,18 +61,21 @@ func Run() {
 	btnApplyPatch = createToolBtn("document-save-symbolic", "Apply selected pending patch")
 	btnApplyCommit = createToolBtn("edit-undo-symbolic", "Restore workspace to this commit's state")
 	btnCommit = createToolBtn("emblem-ok-symbolic", "Commit all changes to git")
-	btnKeys := createToolBtn("preferences-desktop-remote-symbolic", "Manage Gemini API Keys")
+	btnKeys := createToolBtn("dialog-password-symbolic", "Manage Gemini API Keys")
 
 	btnApplyPatch.SetSensitive(false)
 	btnApplyCommit.SetSensitive(false)
 	btnCommit.SetSensitive(false)
 
+	// Left Side: Preparation & History Utility
 	header.PackStart(btnBuild)
 	header.PackStart(btnCopy)
-	header.PackStart(btnApplyPatch)
 	header.PackStart(btnApplyCommit)
-	header.PackEnd(btnCommit)
+
+	// Right Side (Packed Right-to-Left): Config -> Commit -> Apply Patch
 	header.PackEnd(btnKeys)
+	header.PackEnd(btnCommit)
+	header.PackEnd(btnApplyPatch)
 
 	// --- Layout: Resizable Panes ---
 	// Root Paned: [ Sidebar (Left) | Diff View (Right) ]
@@ -400,8 +404,8 @@ func Run() {
 			return
 		}
 
-		exec.Command("git", "add", ".").Run()
-		if err := exec.Command("git", "commit", "-m", msg).Run(); err != nil {
+		git.AddAll(".")
+		if err := git.Commit(".", msg); err != nil {
 			updateStatus(statusLabel, "Failed: "+err.Error())
 		} else {
 			updateStatus(statusLabel, "Committed")

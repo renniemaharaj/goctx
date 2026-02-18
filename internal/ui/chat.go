@@ -84,7 +84,7 @@ func setupChatInterface(overlay *gtk.Overlay) {
 	frame.Add(innerBox)
 	chatBox.Add(frame)
 
-	btnToggleChat := createToolBtn("system-run-symbolic", "Toggle AI Prompt")
+	btnToggleChat := createToolBtn("chat-message-new-symbolic", "Toggle AI Prompt")
 	btnToggleChat.Connect("clicked", func() {
 		if chatBox.IsVisible() {
 			chatBox.Hide()
