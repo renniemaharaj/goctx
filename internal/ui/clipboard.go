@@ -12,10 +12,10 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
-func processClipboard(text string) {
+func processClipboard(text string) int {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return
+		return 0
 	}
 
 	var outputs []model.ProjectOutput
@@ -48,6 +48,7 @@ func processClipboard(text string) {
 			dispatchPatches(outputs)
 		})
 	}
+	return len(outputs)
 }
 
 // dispatchPatches sends valid ProjectOutput objects to the UI

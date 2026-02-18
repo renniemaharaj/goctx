@@ -42,6 +42,7 @@ var (
 	tokenScale         *gtk.Scale
 	smartCheck         *gtk.CheckButton
 	header             *gtk.HeaderBar
+	mainRenderer       *renderer.Renderer
 )
 
 func setupCSS() {
@@ -85,10 +86,10 @@ func Run() {
 	win.Add(overlay)
 
 	// Rendering logic init
-	renderStruct := renderer.NewRenderer(statsBuf, isLoading, statusLabel, updateStatus)
+	mainRenderer = renderer.NewRenderer(statsBuf, &isLoading, statusLabel, updateStatus)
 	renderer.SetupTags(statsBuf)
 
-	bindEvents(renderStruct)
+	bindEvents(mainRenderer)
 	setupDebounceAutoSave()
 
 	backgroundMonitoringLoop()
@@ -96,6 +97,11 @@ func Run() {
 	lastHistoryCount = countCommits()
 
 	win.ShowAll()
+
+	glib.IdleAdd(func() {
+		mainRenderer.RenderMarkdown("# Welcome to GoCtx\nSelect files from the tree to build context, or chat with the AI to generate patches.")
+	})
+
 	gtk.Main()
 }
 
@@ -177,6 +183,7 @@ func createMainLayout() *gtk.Paned {
 	statsView, _ = gtk.TextViewNew()
 	statsView.SetMonospace(true)
 	statsView.SetEditable(false)
+	statsView.SetWrapMode(gtk.WRAP_WORD_CHAR)
 	statsView.SetLeftMargin(15)
 	statsView.SetTopMargin(15)
 	statsBuf, _ = statsView.GetBuffer()

@@ -208,7 +208,7 @@ func handleApplyPatchAction(r interface {
 					if logLine != "" {
 						statsBuf.Insert(statsBuf.GetEndIter(), logLine+"\n")
 						mark := statsBuf.CreateMark("bottom", statsBuf.GetEndIter(), false)
-						statsView.ScrollToMark(mark, 0.0, true, 0.0, 1.0)
+						statsView.ScrollToMark(mark, 0.0, false, 0.0, 1.0)
 					}
 				})
 			})

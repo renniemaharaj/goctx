@@ -87,9 +87,9 @@ func runVerification(mode string, verbose bool, r *renderer.Renderer) {
 		if verbose {
 			glib.IdleAdd(func() {
 				statsBuf.Insert(statsBuf.GetEndIter(), line+"\n")
-				// Auto-scroll to keep logs visible
+				// Auto-scroll to keep logs visible without shifting X-axis
 				mark := statsBuf.CreateMark("bottom", statsBuf.GetEndIter(), false)
-				statsView.ScrollToMark(mark, 0.0, true, 0.0, 1.0)
+				statsView.ScrollToMark(mark, 0.0, false, 0.0, 1.0)
 			})
 		}
 	})

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"goctx/internal/builder"
 	"goctx/internal/config"
 	"goctx/internal/google"
@@ -72,9 +73,19 @@ func setupChatInterface(overlay *gtk.Overlay) {
 					return
 				}
 
+				// Render the full response text (explanation + code)
+				if mainRenderer != nil {
+					mainRenderer.RenderMarkdown(resp)
+				}
+
 				cleaned := stripMarkdown(resp)
-				processClipboard(cleaned)
-				updateStatus(statusLabel, "AI Patch received and parsed")
+				count := processClipboard(cleaned)
+
+				if count > 0 {
+					updateStatus(statusLabel, fmt.Sprintf("AI response processed: %d patch(es) found", count))
+				} else {
+					updateStatus(statusLabel, "AI response received (no patches detected)")
+				}
 			})
 		}()
 	})
