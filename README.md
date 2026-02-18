@@ -1,6 +1,8 @@
 ````markdown
 # GoCtx: High-Integrity Context & Patch Orchestrator
 
+![GoCtx Dashboard](goctx.png)
+
 GoCtx is a local orchestrator designed to bridge development environments with AI agents. It provides a GTK-based dashboard and a flexible CLI to manage project context and safely apply AI-generated code patches using a strict **Stash-Apply-Verify-Commit** workflow.
 
 ## Core Features
