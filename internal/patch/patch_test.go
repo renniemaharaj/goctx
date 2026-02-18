@@ -94,3 +94,67 @@ func TestApplyHunkFirstOccurrenceOnly(t *testing.T) {
 		t.Errorf("Expected exactly 1 replacement, got %d", count)
 	}
 }
+
+func TestApplyHunkEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		original string
+		hunk     Hunk
+		expectOk bool
+		expect   string
+	}{
+		{
+			name:     "Empty Search",
+			original: "some content",
+			hunk:     Hunk{Search: "", Replace: "new"},
+			expectOk: false,
+			expect:   "some content",
+		},
+		{
+			name:     "Fuzzy Match with Indentation Shift",
+			original: "    func main() {\n        fmt.Println()\n    }",
+			hunk: Hunk{
+				Search: "func main() {\n    fmt.Println()\n}", // Different indentation
+				Replace: "func main() {\n    log.Printf(\"hi\")\n}",
+			},
+			expectOk: true,
+			expect:   "func main() {\n    log.Printf(\"hi\")\n}",
+		},
+		{
+			name:     "Trailing Newline Mismatch",
+			original: "line1\nline2",
+			hunk: Hunk{
+				Search:  "line1\nline2\n",
+				Replace: "replaced",
+			},
+			expectOk: true,
+			expect:   "replaced",
+		},
+		{
+			name:     "Replace at Start of File",
+			original: "target\nother",
+			hunk:     Hunk{Search: "target", Replace: "new"},
+			expectOk: true,
+			expect:   "new\nother",
+		},
+		{
+			name:     "Replace at End of File",
+			original: "other\ntarget",
+			hunk:     Hunk{Search: "target", Replace: "new"},
+			expectOk: true,
+			expect:   "other\nnew",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := ApplyHunk(tt.original, tt.hunk)
+			if ok != tt.expectOk {
+				t.Errorf("ok = %v, want %v", ok, tt.expectOk)
+			}
+			if got != tt.expect {
+				t.Errorf("result = %q, want %q", got, tt.expect)
+			}
+		})
+	}
+}
