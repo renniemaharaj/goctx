@@ -2,29 +2,30 @@
 
 ## Surgical Patching Protocol
 
-To improve efficiency and reliability, use **Surgical SEARCH/REPLACE blocks** for updates to existing files.
+To improve efficiency and clarity, use **Surgical SEARCH/REPLACE blocks** for updates to existing files. This is the only patch format supported—simple, direct, and human-readable.
 
 ### Rules for Surgical Edits:
 
 1. **Uniqueness vs. Brevity**: Provide enough context lines (3-5) to ensure a unique match, but avoid excessive vertical context. This optimizes the granular diff view for the human reviewer.
 2. **Exact Match**: The content in the `SEARCH` block must be an exact character-for-character match (including indentation) of the target file.
-3. **Formatting**:
-   - **Option A (JSON)**: Wrap markers in the JSON value. Use `\n` for newlines.
-   - **Option B (Native Dialect)**: Use the raw format for clipboard transfer. This is preferred to avoid JSON escaping issues.
-     ```text
-     "internal/pkg/file.go":
-     <<<<<< SEARCH
-     func Old() {
-         return
-     }
-     ======
-     func New() {
-         return "updated"
-     }
-     >>>>>> REPLACE
-     ```
+3. **Native Dialect Format**: Use the raw format for clipboard transfer. This is direct and avoids any escaping issues.
 
-4. **New Files**: If creating a brand new file (or performing a total recovery), provide the full content as a string without SEARCH/REPLACE markers.
+   ```text
+   "internal/pkg/file.go":
+   <<<<<< SEARCH
+   func Old() {
+       return
+   }
+   ======
+   func New() {
+       return "updated"
+   }
+   >>>>>> REPLACE
+   ```
+
+4. **New Files**: If creating a brand new file, provide the full content as a text block without SEARCH/REPLACE markers.
+
+5. **Single File, Single Purpose**: Each patch should target one file with one logical change. If multiple files or multiple independent changes are needed, create separate patches for each.
 
 ---
 

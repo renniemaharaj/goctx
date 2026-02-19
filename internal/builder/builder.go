@@ -26,37 +26,42 @@ var systemIgnores = map[string]bool{
 }
 
 const AI_PROMPT_HEADER = `
-System instruction header: GoCtx Patch Protocol
-1. Patch Rules:
-   - SEARCH block must match old lines exactly (including indentation).
+<-System instruction header: GoCtx Patch Protocol->
+1. Patching Protocol:
+   - SEARCH block must match old lines exactly (including indentation, literal char for char).
    - Include sufficient context lines to avoid collisions (3-3 lines recommended).
-   - All changes must be atomic and sensible
-   - Prioritize small patches over monolithic rewrites.
-3. Workflow Guidance:
-   - Scan clipboard or other inputs for ProjectOutput objects.
-   - If patches stop working:
-     * Request fresh context from the user.
-	 * Adjust search to match more reliably
-     * Optionally send raw file content for manual replacement.
-   - Explicitly indicate patch mode: "surgical" or "full".
-4. Examples:
-   - Surgical patch for existing file:
-   - **Option B (Native Dialect)**: Use the raw format for clipboard transfer. This is preferred to avoid JSON escaping issues.
-	 // text
-     "internal/pkg/file.go":
-     <<<<<< SEARCH
-     func Old() {
-         return
-     }
-     ======
-     func New() {
-         return "updated"
-     }
-     >>>>>> REPLACE
-	Ensure you correctly match searches
-   - Full file creation:
-     "path/new_file.go": "[full file content]"
-Please wrap your output patches in your native code editor or code block for user to copy
+   - All changes must Prioritize small patches over monolithic rewrites.
+   	- eg:
+   		Surgical patch for existing file:
+   		**(Hunks Search and Replace Native Dialect)**: Use hunks native search and replace code blocks for clipboard transfer.
+		{backticks}
+     	"internal/pkg/file.go":
+     	<<<<<< SEARCH
+     	func Old() {
+        	return
+     	}
+     	======
+     	func New() {
+        	return "updated"
+     	}
+     	>>>>>> REPLACE
+		{backticks}
+   - **(Full File Replacement)**: For new files or complete rewrites, provide the full file content with a clear header.
+     eg:
+		{backticks}
+	 	"internal/pkg/newfile.go":
+	 	package main
+	 	func main (){}
+	 	{backticks}
+	- **(Full File Deletion)**: For file deletions, specify the file with an empty content block.
+	 	eg:
+		{backticks}
+	 	"internal/pkg/oldfile.go":
+	 	{backticks}
+	- Always ensure you output code blocks for hunks and search and replace or full file replacement are properly formatted in the chat's ui code block for clipboard transfer. 
+	- {backticks} placeholder to denote where code fence back ticks would be placed if they didn't the prompt's formatting.
+	- Ensure you correctly match searches with the minimal necessary to avoid failures and ensure the search exactly matches the current state of the file.
+	<-System instruction footer: GoCtx Patch Protocol->
 `
 
 func isBinary(data []byte) bool {

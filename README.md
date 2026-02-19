@@ -10,10 +10,11 @@ GoCtx is a local orchestrator designed to bridge development environments with A
   - **Smart Context**: LSP-aware resolution that automatically includes dependencies of selected files and pulls in files with build errors.
   - **Token Budget**: Adjustable slider to manage context size limits.
 - **Surgical Patching**: Uses `SEARCH/REPLACE` blocks to modify specific lines. This preserves file integrity, minimizes token overhead, and avoids the "lazy AI" habit of omitting code.
-- **Native Dialect Support**: Accepts raw text patches (non-JSON) directly from the clipboard, reducing JSON escaping errors from AI agents.
+- **Native Dialect Support**: Accepts raw text patches directly from the clipboard with file headers and SEARCH/REPLACE blocks. Simply copy the code block and GoCtx detects it automatically.
 - **Verification Engine**: Integrated **Build & Test runners**. Automatically executes your project's validation scripts before finalizing a patch to ensure the AI didn't introduce regressions.
 - **High-Integrity Workflow**: Implements a **Stash-Apply-Verify** pattern. Every operation is backed by a native Git stash; if a patch breaks the build or tests, GoCtx automatically stashes the failing changes to keep your workspace stable.
-- **Clipboard Monitoring**: Background watcher that instantly detects and ingests AI-generated patches (JSON or Native Dialect) from your clipboard for review.
+- **Clipboard Monitoring**: Background watcher that instantly detects and ingests AI-generated patches from your clipboard for review.
+- **Safe Deletion**: When files are marked for deletion by copying only the file header, GoCtx moves them to `.trash` instead of permanently removing them. The trash directory is hidden from Git and ignored in ctxignore.
 - **Visual Diffs**: Granular, color-coded diffing that highlights changes _inside_ surgical blocks, allowing for instant human verification of logic tweaks.
 
 ## Installation
@@ -32,7 +33,7 @@ sudo mv goctx /bin/goctx
    - Use the file tree to select relevant files.
    - Click **Build** to generate the context.
    - Click **Copy** and paste it into your AI chat (e.g., Google AI Studio, ChatGPT).
-3. **Ingest Patches**: When the AI provides a solution, copy the code block (JSON or Native Dialect). GoCtx detects it automatically.
+3. **Ingest Patches**: When the AI provides a solution, copy the code block. GoCtx detects native dialect patches (file header + SEARCH/REPLACE blocks) automatically.
 4. **Review & Apply**:
    - Inspect the granular diff in the main panel.
    - Click **Apply**. GoCtx will run your configured Build/Test scripts.
@@ -53,8 +54,8 @@ Define verification scripts in your project root to enable automated safety chec
 
 ## CLI Reference
 
-- **Stream Context**: Run `goctx` without arguments to output the project state to stdout (useful for piping).
-- **Apply Pipe**: Pipe JSON directly into the tool: `cat patch.json | goctx apply`
+- **Stream Context**: Run `goctx` without arguments to output the project state to stdout (useful for piping into your AI agent).
+- **Apply Patches**: Pipe native dialect patches into the tool: `cat patch.txt | goctx apply`
 
 ## Future Ideas & Roadmap
 

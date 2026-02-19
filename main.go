@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"goctx/internal/apply"
 	"goctx/internal/builder"
-	"goctx/internal/model"
+	"goctx/internal/patch"
 	"goctx/internal/ui"
 	"io"
 	"os"
-	"regexp"
 )
 
 func main() {
@@ -38,20 +37,14 @@ func runApply() {
 	data, _ := io.ReadAll(os.Stdin)
 	text := string(data)
 
-	// Strip markdown backticks if present
-	re := regexp.MustCompile(`(?s)\{.*\"files\".*\}`)
-	match := re.FindString(text)
-	if match == "" {
-		match = text
-	}
-
-	var input model.ProjectOutput
-	if err := json.Unmarshal([]byte(match), &input); err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing JSON: %v\n", err)
+	// Parse native dialect patches (SEARCH/REPLACE blocks)
+	input, ok := patch.ParseNative(text)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Error: Could not parse patch. Expected native dialect format (file header with SEARCH/REPLACE blocks)\n")
 		os.Exit(1)
 	}
 
-	// New: Progress tracking for CLI
+	// Progress tracking for CLI
 	err := apply.ApplyPatch(".", input, func(phase, desc, logLine string) {
 		if phase != "" {
 			fmt.Printf("\n[%s] %s\n", phase, desc)

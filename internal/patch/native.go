@@ -36,16 +36,23 @@ func ParseNative(text string) (model.ProjectOutput, bool) {
 			end = matches[i+1][0]
 		}
 
-		// Extract the block
-		if start >= end {
-			continue
+		// Extract the block - this is the content between this file header and the next header (or EOF)
+		var content string
+		if start < end {
+			content = text[start:end]
 		}
-		content := text[start:end]
+		trimmedContent := strings.TrimSpace(content)
 
-		// Validate: Must contain at least one SEARCH marker to be considered a patch
-		if strings.Contains(content, "<<<<<< SEARCH") && strings.Contains(content, "======") {
-			// Trim leading whitespace (like space after colon) but preserve internal indentation
-			out.Files[filename] = strings.TrimSpace(content)
+		// Validate: Accept if any of these conditions are met:
+		// 1. Has SEARCH/REPLACE markers (surgical edit)
+		// 2. Is empty/whitespace-only (file deletion - moving to trash)
+		// 3. Has non-marker content (new file or complete file replacement)
+		hasSurgicalMarkers := strings.Contains(content, "<<<<<< SEARCH") && strings.Contains(content, "======")
+		isEmpty := trimmedContent == ""
+		hasContent := !isEmpty
+
+		if hasSurgicalMarkers || isEmpty || hasContent {
+			out.Files[filename] = trimmedContent
 			filesFound = append(filesFound, filename)
 		}
 	}

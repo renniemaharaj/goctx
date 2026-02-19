@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"encoding/json"
 	"fmt"
 	"goctx/internal/model"
 	"goctx/internal/patch"
@@ -17,30 +16,10 @@ func processClipboard(text string) int {
 	if text == "" {
 		return 0
 	}
-
-	var outputs []model.ProjectOutput
-
-	// Try single object
-	var single model.ProjectOutput
-	if err := json.Unmarshal([]byte(text), &single); err == nil && len(single.Files) > 0 {
-		outputs = append(outputs, single)
-	} else {
-		// Try array of objects
-		var multiple []model.ProjectOutput
-		if err := json.Unmarshal([]byte(text), &multiple); err == nil {
-			for _, p := range multiple {
-				if len(p.Files) > 0 {
-					outputs = append(outputs, p)
-				}
-			}
-		}
-	}
-
-	if len(outputs) == 0 {
-		// Fallback: Try Native Dialect (file: SEARCH/REPLACE blocks)
-		if native, ok := patch.ParseNative(text); ok {
-			outputs = append(outputs, native)
-		}
+	outputs := []model.ProjectOutput{}
+	// Fallback: Try Native Dialect (file: SEARCH/REPLACE blocks)
+	if native, ok := patch.ParseNative(text); ok {
+		outputs = append(outputs, native)
 	}
 
 	if len(outputs) > 0 {

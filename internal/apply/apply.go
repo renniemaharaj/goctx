@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"goctx/internal/config"
 	"goctx/internal/model"
@@ -14,6 +15,8 @@ import (
 )
 
 type ProgressFunc func(phase, desc string, logLine string)
+
+const trashDir = ".trash"
 
 func ApplyHunksToString(original string, hunks []patch.Hunk) (string, error) {
 	result := original
@@ -27,6 +30,45 @@ func ApplyHunksToString(original string, hunks []patch.Hunk) (string, error) {
 	return result, nil
 }
 
+// isFileDeletion detects if content represents a file deletion (empty or whitespace only)
+func isFileDeletion(content string) bool {
+	return strings.TrimSpace(content) == ""
+}
+
+// moveToTrash moves a file to the .trash directory instead of permanently deleting it
+func moveToTrash(root, filePath string) error {
+	targetPath := filepath.Join(root, filePath)
+
+	// Check if file exists before attempting to move
+	_, err := os.Stat(targetPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist, nothing to trash
+			return nil
+		}
+		return fmt.Errorf("could not stat file: %w", err)
+	}
+
+	// Create trash directory if it doesn't exist
+	trashPath := filepath.Join(root, trashDir)
+	if err := os.MkdirAll(trashPath, 0755); err != nil {
+		return fmt.Errorf("could not create trash directory: %w", err)
+	}
+
+	// Generate unique trash filename to avoid collisions
+	baseFileName := filepath.Base(filePath)
+	timestamp := time.Now().Format("20060102-150405")
+	trashFileName := fmt.Sprintf("%s_%s", timestamp, baseFileName)
+	trashedPath := filepath.Join(trashPath, trashFileName)
+
+	// Move file to trash
+	if err := os.Rename(targetPath, trashedPath); err != nil {
+		return fmt.Errorf("could not move file to trash: %w", err)
+	}
+
+	return nil
+}
+
 func ApplyPatch(root string, input model.ProjectOutput, onProgress ProgressFunc) error {
 	if len(input.Files) == 0 {
 		return fmt.Errorf("no files to apply")
@@ -38,6 +80,17 @@ func ApplyPatch(root string, input model.ProjectOutput, onProgress ProgressFunc)
 
 	for path, content := range input.Files {
 		if !safePath(root, path) {
+			continue
+		}
+
+		// Check if this is a deletion (empty/whitespace-only content)
+		if isFileDeletion(content) {
+			if onProgress != nil {
+				onProgress("", fmt.Sprintf("Trashing: %s", path), "")
+			}
+			if err := moveToTrash(root, path); err != nil {
+				return fmt.Errorf("TRASH_ERROR: Could not trash file %s: %w", path, err)
+			}
 			continue
 		}
 
